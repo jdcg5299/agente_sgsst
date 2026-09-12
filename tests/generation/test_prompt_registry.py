@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.generation.prompt_registry import (
+from agente_sgsst.generation.prompt_registry import (
     PromptRegistry,
     construir_prompt,
     get_registry,

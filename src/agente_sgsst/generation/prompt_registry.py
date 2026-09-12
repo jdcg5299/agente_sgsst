@@ -23,7 +23,31 @@ from pathlib import Path
 from typing import Any
 
 _PROYECTO_RAIZ = Path(__file__).resolve().parents[2]
-_MASTER_PROMPTS = _PROYECTO_RAIZ / "docs" / "master_prompts.md"
+
+
+def _resolver_master_prompts() -> Path:
+    """Localiza `docs/master_prompts.md` de forma robusta a la ubicación del paquete.
+
+    Se busca, en orden: (1) junto al proyecto raíz si `docs/` está en el CWD,
+    (2) como recurso de datos del paquete (copia instalable), y (3) subiendo desde
+    el paquete hasta encontrar un directorio `docs/`.
+    """
+    candidatos = [
+        Path.cwd() / "docs" / "master_prompts.md",
+        Path(__file__).parent / "data" / "master_prompts.md",
+        *_PROYECTO_RAIZ.glob("docs/master_prompts.md"),
+    ]
+    for ruta in candidatos:
+        if ruta.exists():
+            return ruta
+    raise FileNotFoundError(
+        "No se localizó docs/master_prompts.md. Todo prompt de producción debe vivir "
+        "en master_prompts.md (Principio VI/II de CONSTITUTION.md); sin el archivo "
+        "maestro el agente NO está autorizado a generar documentos."
+    )
+
+
+_MASTER_PROMPTS = _resolver_master_prompts()
 _PROMPT_GENERICO_KEY = "GENERICO"
 
 # Placeholders soportados (formato [PLACEHOLDER] y {PLACEHOLDER}).

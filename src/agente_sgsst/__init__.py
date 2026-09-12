@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from agente-sgsst!")
+"""Agente SG-SST: generador de documentos SG-SST bajo Resolución 0312 de 2019."""

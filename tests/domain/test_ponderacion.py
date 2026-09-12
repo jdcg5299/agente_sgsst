@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.domain.ponderacion import (
+from agente_sgsst.domain.ponderacion import (
     CriterioCalificacion,
     ResultadoDiagnosticoCapituloIII,
     calcular_diagnostico,

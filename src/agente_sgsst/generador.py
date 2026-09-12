@@ -1,10 +1,10 @@
 import os
 import json
 from datetime import datetime
-from maquetador import get_header_ft_sst_002
-from llm_client import LLMClient
-from converter import convertir_markdown_a_docx
-from generation.prompt_registry import construir_prompt
+from agente_sgsst.rendering.maquetador import get_header_ft_sst_002
+from agente_sgsst.generation.llm_client import LLMClient
+from agente_sgsst.rendering.converter import convertir_markdown_a_docx
+from agente_sgsst.generation.prompt_registry import construir_prompt
 
 llm = LLMClient()
 

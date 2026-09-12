@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.converter import _convertir_con_python_docx, _parsear_tabla
+from agente_sgsst.rendering.converter import _convertir_con_python_docx, _parsear_tabla
 
 
 class TestParseoTabla:

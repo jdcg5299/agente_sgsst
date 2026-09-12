@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.domain.clasificacion import (
+from agente_sgsst.domain.clasificacion import (
     CAPITULO_II_CONTEO_VERIFICADO,
     RiesgoARL,
     clasificar_empresa,
@@ -72,7 +72,7 @@ class TestCorreccionHallazgo51:
         import json
         from pathlib import Path
 
-        ruta = Path(__file__).parents[2] / "src/domain/data/estandares_0312_capitulo_iii.json"
+        ruta = Path(__file__).parents[2] / "src/agente_sgsst/domain/data/estandares_0312_capitulo_iii.json"
         datos = json.loads(ruta.read_text(encoding="utf-8"))
         numerales_tabla = {item["numeral"] for item in datos["items"]}
         assert get_applicable_items("Capítulo III") == numerales_tabla

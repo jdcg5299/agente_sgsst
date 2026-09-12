@@ -1,12 +1,11 @@
-import sys
+"""Punto de entrada del Agente SG-SST (CLI interactiva)."""
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import json
 import shutil
-from ingesta import solicitar_datos_usuario
-from diagnostico import generar_diagnostico_base
-from generador import generar_documento_individual, generar_documentos_por_capitulo, cargar_catalogo
+
+from agente_sgsst.cli.ingesta import solicitar_datos_usuario
+from agente_sgsst.rendering.diagnostico import generar_diagnostico_base
+from agente_sgsst.generador import generar_documento_individual, generar_documentos_por_capitulo, cargar_catalogo
 
 # Configuración básica
 CONTEXTO_PATH = "data/contexto_empresa.json"
@@ -106,7 +105,7 @@ def menu_principal(contexto):
             
         elif opcion == "6":
             print("\n--- SINCRONIZANDO CON GOOGLE DRIVE ---")
-            from gdrive_sync import GoogleDriveSync
+            from agente_sgsst.integrations.gdrive_sync import GoogleDriveSync
             sync = GoogleDriveSync()
             sync.sincronizar_directorio()
             print("Sincronización finalizada.")
@@ -118,7 +117,8 @@ def menu_principal(contexto):
         else:
             print("Opción no válida. Intente nuevamente.")
 
-if __name__ == "__main__":
+def main():
+    """Punto de entrada principal para el comando de terminal o script."""
     print("--- Motor del Agente SG-SST ---")
     
     asegurar_estructura()
@@ -137,3 +137,6 @@ if __name__ == "__main__":
     
     # Entrar al menú principal
     menu_principal(contexto)
+
+if __name__ == "__main__":
+    main()
