@@ -1,0 +1,21 @@
+{
+  "empresa": {
+    "razon_social": "",
+    "nit": "",
+    "direccion": "",
+    "representante_legal": "",
+    "actividad_economica": "",
+    "clase_riesgo_arl": "",
+    "total_trabajadores": 0
+  },
+  "responsable_sst": {
+    "nombre": "",
+    "cc": "",
+    "formacion": "",
+    "licencia": ""
+  },
+  "estado_sistema": {
+    "capitulo_aplicable": "",
+    "documentos_generados": []
+  }
+}
