@@ -1,0 +1,24 @@
+# Secrets and sensitive data — NEVER into the image (Principio X)
+.env
+credentials.json
+token.pickle
+data/contexto_empresa.json
+sistema_gestion/
+
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[oc]
+.pytest_cache/
+build/
+dist/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local tooling
+.agents

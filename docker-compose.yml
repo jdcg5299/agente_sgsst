@@ -1,19 +1,13 @@
-version: '3.8'
-
 services:
   agente-sgsst:
   # Omit build if you want to pull or build directly
     build: .
     container_name: agente_sgsst_container
     restart: unless-stopped
-    environment:
-      - LLM_PROVIDER=openai/gpt-oss-120b
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GROK_API_KEY=${GROK_API_KEY}
     volumes:
       - ./sistema_gestion:/app/sistema_gestion
       - ./data:/app/data
+      - ./.env:/app/.env:ro
       - ./credentials.json:/app/credentials.json
       - ./token.pickle:/app/token.pickle
     stdin_open: true
