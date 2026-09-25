@@ -1,15 +1,20 @@
 """
-Motor de ponderación y cálculo de diagnóstico para Capítulo III — Resolución 0312 de 2019.
+Motor de ponderación y cálculo de diagnóstico — Resolución 0312 de 2019.
 
 Corrige el hallazgo 5.3 de CONSTITUTION.md (Sección 5): antes, `diagnostico.py`
 solo maquetaba un esqueleto visual sin calcular ningún puntaje. Este módulo es el
 motor determinista de cálculo real.
 
-Solo soporta Capítulo III (60 ítems), cuya tabla de ponderación oficial está
-cargada en `src/domain/data/estandares_0312_capitulo_iii.json`. Capítulos I y II
-se rechazan explícitamente (`NotImplementedError`): la normativa vigente tiene
-anexos de ponderación propios para esos capítulos que aún no están cargados al
-proyecto, y el motor NO inventa porcentajes (Principio X y XI de CONSTITUTION.md).
+Modelo oficial implementado (confirmado contra el Anexo 1 — Tabla de Valores):
+- Existe UNA sola Tabla de Valores de 60 ítems (Art. 27) que se usa para TODOS
+  los capítulos (cargan desde `src/domain/data/estandares_0312_capitulo_iii.json`).
+- El conjunto de ítems APLICABLE por capítulo sale de los Artículos 3 (Cap. I: 7),
+  9 (Cap. II: 21) y 16 (Cap. III: 60), ver `clasificacion.get_applicable_items`.
+- Para empresas de menos de 50 trabajadores con riesgo I, II o III (Cap. I y II),
+  los ítems NO aplicables se otorgan AUTOMÁTICAMENTE con el porcentaje máximo en
+  la columna "No Aplica" (Art. 27, parágrafo 2). El motor reproduce esa regla sin
+  requerir respuesta manual del evaluador.
+- Capítulo III exige evaluar explícitamente los 60 ítems.
 
 Reglas de dominio aplicadas (ver `docs/explicacion_del_negocio.md` sección 3):
 - Criterios: "Cumple totalmente" (C), "No cumple" (NC), "No aplica" (NA).
@@ -24,8 +29,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from agente_sgsst.domain.clasificacion import get_applicable_items
+
 _DATA_DIR = Path(__file__).parent / "data"
 _ARCHIVO_CAPITULO_III = _DATA_DIR / "estandares_0312_capitulo_iii.json"
+
+_CAPITULOS_SOPORTADOS = ("Capítulo I", "Capítulo II", "Capítulo III")
 
 
 class CriterioCalificacion(str, Enum):
@@ -38,7 +47,7 @@ class CriterioCalificacion(str, Enum):
 
 @dataclass(frozen=True)
 class ItemPonderado:
-    """Ítem/criterio del estándar mínimo de Capítulo III, con su ponderación oficial."""
+    """Ítem/criterio del estándar mínimo, con su ponderación oficial (Anexo 1)."""
 
     numeral: str
     descripcion: str
@@ -69,6 +78,10 @@ class ResultadoItem:
     criterio: CriterioCalificacion
     justificacion: str
     puntos_obtenidos: float
+    # True cuando el ítem fue otorgado como "No Aplica" AUTOMÁTICAMENTE por la
+    # regla del Art. 27 (no aplicable para el capítulo de la empresa). No es una
+    # omisión del evaluador, por lo que no debe marcarse como hallazgo a revisar.
+    automatico: bool = False
 
 
 @dataclass
@@ -92,9 +105,14 @@ class ResultadoDiagnosticoCapituloIII:
     items: list[ResultadoItem] = field(default_factory=list)
     por_estandar: list[ResumenEstandar] = field(default_factory=list)
 
+    @property
+    def aplicables(self) -> int:
+        """Ítems que debía evaluar manualmente el evaluador (los no automáticos)."""
+        return sum(1 for item in self.items if not item.automatico)
+
 
 def cargar_estandares_capitulo_iii() -> dict[str, ItemPonderado]:
-    """Carga la tabla de 60 ítems de Capítulo III desde el JSON estructurado.
+    """Carga la Tabla de Valores de 60 ítems (Art. 27) desde el JSON estructurado.
 
     Es la fuente única de verdad (DRY): también la usa `clasificacion.py` vía
     `get_applicable_items` para no duplicar la lista de numerales.
@@ -122,6 +140,22 @@ def cargar_estandares_capitulo_iii() -> dict[str, ItemPonderado]:
 
 _ITEMS_CAPITULO_III: dict[str, ItemPonderado] = cargar_estandares_capitulo_iii()
 
+# Justificación oficial que se registra en los ítems otorgados automáticamente como
+# "No Aplica" para empresas de menos de 50 trabajadores con riesgo I/II/III (Art. 27
+# parágrafo 2). Es parte de la regla de la norma, no una decisión del evaluador.
+_JUSTIFICACION_NA_AUTO = {
+    "Capítulo I": (
+        "Ítem no aplicable para empresas de 10 o menos trabajadores con riesgo I, II o III "
+        "(Art. 3 y Art. 27, Res. 0312 de 2019) — se otorga el porcentaje máximo en la "
+        "columna 'No Aplica'."
+    ),
+    "Capítulo II": (
+        "Ítem no aplicable para empresas de menos de 50 trabajadores con riesgo I, II o III "
+        "(Art. 9 y Art. 27, Res. 0312 de 2019) — se otorga el porcentaje máximo en la "
+        "columna 'No Aplica'."
+    ),
+}
+
 
 def _validar_integridad_tabla() -> None:
     """Verifica que la suma de los 60 ítems sea 1.0 (100%) — falla explícito si no.
@@ -135,17 +169,17 @@ def _validar_integridad_tabla() -> None:
     )
     if len(_ITEMS_CAPITULO_III) != 60:
         raise ValueError(
-            f"Integridad de tabla Capítulo III comprometida: se cargaron "
+            f"Integridad de tabla comprometida: se cargaron "
             f"{len(_ITEMS_CAPITULO_III)} ítems, se esperaban 60."
         )
     if abs(total_items - 1.0) > 1e-9:
         raise ValueError(
-            f"Integridad de tabla Capítulo III comprometida: la suma de los "
+            f"Integridad de tabla comprometida: la suma de los "
             f"valor_item es {total_items:.6f}, debe ser 1.0 (100%)."
         )
     if abs(total_estandar - 1.0) > 1e-9:
         raise ValueError(
-            f"Integridad de tabla Capítulo III comprometida: la suma de los "
+            f"Integridad de tabla comprometida: la suma de los "
             f"valor_estandar es {total_estandar:.6f}, debe ser 1.0 (100%)."
         )
 
@@ -191,22 +225,30 @@ def _parsear_respuesta(numeral: str, respuesta: RespuestaItem | tuple | Criterio
     )
 
 
-def calcular_diagnostico_capitulo_iii(
+def _calcular_diagnostico(
+    capitulo: str,
     respuestas: dict[str, RespuestaItem | tuple | CriterioCalificacion],
 ) -> ResultadoDiagnosticoCapituloIII:
-    """Calcula el diagnóstico ponderado de Capítulo III a partir de las respuestas.
-
-    `respuestas` mapea numeral (ej. "4.2.3") a un valor que puede ser:
-    - `RespuestaItem(criterio, justificacion)`, o
-    - `(criterio, justificacion)` (tupla), o
-    - `CriterioCalificacion` directo (sin justificación, solo válido para C/NC).
+    """Núcleo del cálculo ponderado para cualquier capítulo de la Resolución 0312.
 
     Reglas estrictas (Principio XI de CONSTITUTION.md — sin valores por defecto
     silenciosos):
-    - Se deben responder TODOS los 60 ítems; falta cualquier numeral -> ValueError.
+    - Se deben responder TODOS los ítems APLICABLES del capítulo (7 para Cap. I,
+      21 para Cap. II, 60 para Cap. III); falta cualquier numeral aplicable -> ValueError.
+    - Los numerales NO aplicables para empresas de <50 trabajadores con riesgo
+      I/II/III (Cap. I y II) se otorgan automáticamente como "No Aplica" con el
+      puntaje máximo y su justificación normativa (Art. 27, parágrafo 2).
     - Un numeral desconocido (fuera de los 60) -> ValueError.
+    - Un numeral de la tabla que NO aplica al capítulo no puede responderse
+      manualmente -> ValueError (no contradice la regla de "No Aplica" automático).
     - Un ítem "No aplica" SIN justificación -> ValueError.
     """
+    if capitulo not in _CAPITULOS_SOPORTADOS:
+        raise ValueError(
+            f"Capítulo no soportado: {capitulo!r}. Debe ser 'Capítulo I', "
+            "'Capítulo II' o 'Capítulo III'."
+        )
+
     if not isinstance(respuestas, dict):
         raise ValueError(
             f"respuestas debe ser un dict numeral->(criterio, justificacion), "
@@ -215,21 +257,33 @@ def calcular_diagnostico_capitulo_iii(
 
     numerales_tabla = set(_ITEMS_CAPITULO_III.keys())
     numerales_respuesta = set(respuestas.keys())
-
-    faltantes = numerales_tabla - numerales_respuesta
-    if faltantes:
-        faltantes_ordenadas = ", ".join(sorted(faltantes))
-        raise ValueError(
-            f"Respuestas incompletas para Capítulo III: faltan {len(faltantes)} ítems "
-            f"({faltantes_ordenadas}). El diagnóstico exige evaluar los 60 ítems."
-        )
+    aplicables = set(get_applicable_items(capitulo))
+    no_aplicables = numerales_tabla - aplicables
 
     desconocidos = numerales_respuesta - numerales_tabla
     if desconocidos:
         desconocidos_ordenados = ", ".join(sorted(desconocidos))
         raise ValueError(
             f"Numerales desconocidos: {desconocidos_ordenados}. No pertenecen a la "
-            "tabla de 60 ítems de Capítulo III."
+            "tabla de 60 ítems de la Resolución 0312 de 2019."
+        )
+
+    no_aplicables_respondidos = numerales_respuesta & no_aplicables
+    if no_aplicables_respondidos:
+        ordenados = ", ".join(sorted(no_aplicables_respondidos))
+        raise ValueError(
+            f"Ítems no aplicables al {capitulo} no pueden responderse manualmente: "
+            f"{ordenados}. Se otorgan automáticamente como 'No Aplica' con el "
+            "porcentaje máximo (Art. 27, parágrafo 2, Res. 0312 de 2019)."
+        )
+
+    faltantes = aplicables - numerales_respuesta
+    if faltantes:
+        faltantes_ordenadas = ", ".join(sorted(faltantes))
+        raise ValueError(
+            f"Respuestas incompletas para {capitulo}: faltan {len(faltantes)} ítems "
+            f"({faltantes_ordenadas}). El diagnóstico exige evaluar los {len(aplicables)} "
+            "ítems aplicables del capítulo."
         )
 
     resultados: list[ResultadoItem] = []
@@ -237,7 +291,15 @@ def calcular_diagnostico_capitulo_iii(
 
     for numeral in sorted(numerales_tabla):
         item = _ITEMS_CAPITULO_III[numeral]
-        respuesta = _parsear_respuesta(numeral, respuestas[numeral])
+        automatico = numeral in no_aplicables
+
+        if automatico:
+            respuesta = RespuestaItem(
+                criterio=CriterioCalificacion.NO_APLICA,
+                justificacion=_JUSTIFICACION_NA_AUTO[capitulo],
+            )
+        else:
+            respuesta = _parsear_respuesta(numeral, respuestas[numeral])
 
         if item.estandar_num not in por_estandar:
             por_estandar[item.estandar_num] = {"maximo": 0.0, "obtenido": 0.0}
@@ -267,6 +329,7 @@ def calcular_diagnostico_capitulo_iii(
                 criterio=respuesta.criterio,
                 justificacion=respuesta.justificacion,
                 puntos_obtenidos=puntos,
+                automatico=automatico,
             )
         )
 
@@ -287,7 +350,7 @@ def calcular_diagnostico_capitulo_iii(
     ]
 
     return ResultadoDiagnosticoCapituloIII(
-        capitulo="Capítulo III",
+        capitulo=capitulo,
         total_obtenido=round(total_obtenido, 6),
         total_posible=round(total_posible, 6),
         porcentaje=round(porcentaje, 6),
@@ -296,13 +359,26 @@ def calcular_diagnostico_capitulo_iii(
     )
 
 
+def calcular_diagnostico_capitulo_iii(
+    respuestas: dict[str, RespuestaItem | tuple | CriterioCalificacion],
+) -> ResultadoDiagnosticoCapituloIII:
+    """Calcula el diagnóstico ponderado de Capítulo III (los 60 ítems).
+
+    Mantiene su firma por compatibilidad; delega en el motor generalizado.
+
+    `respuestas` mapea numeral (ej. "4.2.3") a un valor que puede ser:
+    - `RespuestaItem(criterio, justificacion)`, o
+    - `(criterio, justificacion)` (tupla), o
+    - `CriterioCalificacion` directo (sin justificación, solo válido para C/NC).
+    """
+    return _calcular_diagnostico("Capítulo III", respuestas)
+
+
 def calcular_diagnostico(capitulo: str, respuestas: dict) -> ResultadoDiagnosticoCapituloIII:
-    """Punto de entrada genérico que rechaza explícitamente Capítulos I y II."""
-    if capitulo != "Capítulo III":
-        raise NotImplementedError(
-            f"No existe motor de ponderación para {capitulo}: la Resolución 0312/2019 "
-            "tiene anexos de ponderación propios para Capítulos I y II que aún no están "
-            "cargados al proyecto. No se inventan porcentajes (ver CONSTITUTION.md "
-            "Sección 3 y hallazgo 5.3)."
-        )
-    return calcular_diagnostico_capitulo_iii(respuestas)
+    """Punto de entrada genérico: calcula el diagnóstico para cualquier capítulo.
+
+    Capítulos I y II usan la misma Tabla de Valores (Art. 27) que Capítulo III; la
+    diferencia es el conjunto de ítems aplicables (Arts. 3 y 9) y la regla de
+    "No Aplica" automático para los ítems no exigibles (Art. 27, parágrafo 2).
+    """
+    return _calcular_diagnostico(capitulo, respuestas)

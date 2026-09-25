@@ -99,30 +99,80 @@ def clasificar_empresa(total_trabajadores: int, clase_riesgo_arl) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Ítems aplicables por capítulo
+# Ítems aplicables por capítulo — válidos contra el ANEXO 1 oficial.
 # ---------------------------------------------------------------------------
-
+# Corrección de los hallazgos 5.1 y 5.2 de CONSTITUTION.md (resueltos con la
+# fuente oficial): la Resolución 0312/2019 NO tiene tablas de ponderación propias
+# por capítulo. Existe UNA sola Tabla de Valores de 60 ítems (Art. 27, Anexo 1) que
+# se usa para todos los capítulos. Los conjuntos aplicables por capítulo salen de
+# los ARTÍCULOS 3 (Cap. I: 7 estándares), 9 (Cap. II: 21 estándares) y 16 (Cap. III:
+# 60 estándares), mapeados 1:1 a los numerales de la Tabla de Valores. Los ítems no
+# aplicables de una empresa de menos de 50 trabajadores con riesgo I, II o III se
+# OTORGAN automáticamente con el porcentaje máximo en la columna "No Aplica"
+# (Art. 27, parágrafo 2).
 _CAPITULO_I_ITEMS: frozenset[str] = frozenset(
-    {"1.1.1", "1.1.4", "1.2.1", "2.1.1", "2.2.1", "2.4.1", "2.5.1"}
+    {
+        # Art. 3, Res. 0312/2019 (empresas de 10 o menos trabajadores, riesgo I-II-III):
+        # persona que diseñe el SG-SST, afiliación SS, capacitación, plan anual,
+        # evaluaciones médicas ocupacionales, identificación de peligros y medidas de control.
+        "1.1.1", "1.1.4", "1.2.1", "2.4.1", "3.1.4", "4.1.1", "4.2.1"
+    }
 )
 
-# ADVERTENCIA — hallazgo 5.2 de CONSTITUTION.md:
-# checklist_documental_resolucion_0312.md lista 22 numerales para Capítulo II,
-# pese a que su propio encabezado declara "21 Estándares Mínimos". No ha sido
-# posible conciliar esto contra el anexo oficial de la Resolución 0312/2019
-# (no está entre las fuentes cargadas al proyecto). Se conserva el set tal como
-# aparece en la fuente para no inventar cuál ítem "sobra", pero se expone
-# `CAPITULO_II_CONTEO_VERIFICADO = False` para que cualquier capa superior
-# (UI, reportes, logs) pueda advertir visiblemente la discrepancia en vez de
-# ocultarla — ver Principio I y XI de CONSTITUTION.md.
 _CAPITULO_II_ITEMS: frozenset[str] = frozenset(
     {
-        "1.1.1", "1.1.2", "1.1.4", "1.1.6", "1.1.8", "1.2.1",
-        "2.1.1", "2.2.1", "2.3.1", "2.4.1", "2.5.1", "2.6.1", "2.7.1", "2.8.1", "2.11.1",
-        "3.1.1", "3.1.2", "3.2.1", "3.2.2", "3.3.1", "4.1.1", "4.2.1",
+        # Art. 9, Res. 0312/2019 (empresas de 11 a 50 trabajadores, riesgo I-II-III):
+        # 21 estándares mínimos, verificados numeral por numeral contra la Tabla de
+        # Valores oficial (Anexo 1). Resuelve la discrepancia 5.2: el checklist
+        # documental traía 22 por usar numeración propia, no los numerales oficiales.
+        # 1. Asignación de persona que diseñe el SG-SST
+        "1.1.1",
+        # 2. Asignación de recursos
+        "1.1.3",
+        # 3. Afiliación al Sistema de Seguridad Social Integral
+        "1.1.4",
+        # 4. COPASST
+        "1.1.6",
+        # 5. Comité de Convivencia Laboral
+        "1.1.8",
+        # 6. Programa de capacitación
+        "1.2.1",
+        # 7. Política de SST
+        "2.1.1",
+        # 8. Plan Anual de Trabajo
+        "2.4.1",
+        # 9. Archivo o retención documental
+        "2.5.1",
+        # 10. Descripción sociodemográfica y diagnóstico de condiciones de salud
+        "3.1.1",
+        # 11. Actividades de Medicina del Trabajo y de Prevención y Promoción de la Salud
+        "3.1.2",
+        # 12. Evaluaciones médicas ocupacionales
+        "3.1.4",
+        # 13. Restricciones y recomendaciones médico-laborales
+        "3.1.6",
+        # 14. Reporte de accidentes de trabajo y enfermedades laborales
+        "3.2.1",
+        # 15. Investigación de incidentes, accidentes y enfermedades diagnosticadas como laborales
+        "3.2.2",
+        # 16. Identificación de peligros, evaluación y valoración de riesgos
+        "4.1.1",
+        # 17. Mantenimiento periódico de instalaciones, equipos, máquinas y herramientas
+        "4.2.5",
+        # 18. Entrega de EPP y capacitación en su uso adecuado
+        "4.2.6",
+        # 19. Plan de Prevención, Preparación y Respuesta ante emergencias
+        "5.1.1",
+        # 20. Brigada de prevención, preparación y respuesta ante emergencias
+        "5.1.2",
+        # 21. Revisión por la alta dirección
+        "6.1.3",
     }
 )
 CAPITULO_II_CONTEO_ESPERADO_SEGUN_NORMA = 21
+# Con la fuente oficial cargada (Anexo 1 + Art. 9), el conteo de Capítulo II queda
+# conciliado: 21 ítems. La discrepancia del checklist (22) quedó documentada como
+# error de numeración propia y se resolvió a favor de la norma.
 CAPITULO_II_CONTEO_VERIFICADO = len(_CAPITULO_II_ITEMS) == CAPITULO_II_CONTEO_ESPERADO_SEGUN_NORMA
 
 

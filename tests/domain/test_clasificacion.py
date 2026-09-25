@@ -79,18 +79,34 @@ class TestCorreccionHallazgo51:
 
 
 class TestHallazgo52DiscrepanciaCapituloII:
-    def test_capitulo_ii_tiene_22_items_no_21_como_dice_la_fuente(self):
-        """Documenta la discrepancia en vez de ocultarla (hallazgo 5.2)."""
+    def test_capitulo_ii_tiene_21_items_oficiales(self):
+        """Resuelto contra el Anexo 1 / Art. 9 de la Res. 0312/2019: 21 estándares.
+
+        El checklist documental traía 22 porque usaba numeración propia; los 21
+        numerales oficiales de la Tabla de Valores se validaron 1:1 contra el Art. 9.
+        """
         aplicables = get_applicable_items("Capítulo II")
-        assert len(aplicables) == 22  # la fuente checklist trae 22, pese a decir "21"
+        assert len(aplicables) == 21
 
-    def test_bandera_de_conteo_verificado_es_falsa(self):
-        """La bandera debe advertir explícitamente que el conteo no está conciliado
-        contra el anexo oficial — no debe pasar desapercibido como si fuera correcto."""
-        assert CAPITULO_II_CONTEO_VERIFICADO is False
+    def test_conjunto_oficial_de_capitulo_ii(self):
+        """Los 21 numerales de la Tabla de Valores que corresponden al Art. 9."""
+        assert get_applicable_items("Capítulo II") == {
+            "1.1.1", "1.1.3", "1.1.4", "1.1.6", "1.1.8", "1.2.1",
+            "2.1.1", "2.4.1", "2.5.1",
+            "3.1.1", "3.1.2", "3.1.4", "3.1.6", "3.2.1", "3.2.2",
+            "4.1.1", "4.2.5", "4.2.6",
+            "5.1.1", "5.1.2", "6.1.3",
+        }
 
-    def test_capitulo_i_si_tiene_el_conteo_correcto(self):
+    def test_bandera_de_conteo_verificado_es_true(self):
+        """Con la fuente oficial cargada, el conteo de Capítulo II quedó conciliado."""
+        assert CAPITULO_II_CONTEO_VERIFICADO is True
+
+    def test_capitulo_i_tiene_el_conjunto_oficial(self):
         assert len(get_applicable_items("Capítulo I")) == 7
+        assert get_applicable_items("Capítulo I") == {
+            "1.1.1", "1.1.4", "1.2.1", "2.4.1", "3.1.4", "4.1.1", "4.2.1"
+        }
 
 
 class TestHallazgo513RepresentacionDeRiesgo:

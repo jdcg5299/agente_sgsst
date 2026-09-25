@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from agente_sgsst.domain.clasificacion import get_applicable_items
 from agente_sgsst.domain.ponderacion import (
     CriterioCalificacion,
     ResultadoDiagnosticoCapituloIII,
@@ -27,6 +28,21 @@ def _respuestas_de_relleno(con=None, excepto=None):
     """
     items = cargar_estandares_capitulo_iii()
     respuestas = {numeral: ("C", "") for numeral in items}
+    if excepto:
+        for numeral in excepto:
+            respuestas.pop(numeral, None)
+    if con:
+        respuestas.update(con)
+    return respuestas
+
+
+def _respuestas_aplicables(capitulo, con=None, excepto=None):
+    """Genera respuestas para los ítems APLICABLES del capítulo (por defecto 'C').
+
+    Los numerales no aplicables NO se responden: el motor los otorga
+    automáticamente como "No Aplica" (Art. 27 parágrafo 2).
+    """
+    respuestas = {numeral: ("C", "") for numeral in get_applicable_items(capitulo)}
     if excepto:
         for numeral in excepto:
             respuestas.pop(numeral, None)
@@ -125,12 +141,63 @@ class TestValidacionEstricta:
             calcular_diagnostico_capitulo_iii(["2.1.1"])  # type: ignore[arg-type]
 
 
-class TestRechazoOtrosCapitulos:
-    @pytest.mark.parametrize("capitulo", ["Capítulo I", "Capítulo II"])
-    def test_no_inventa_ponderacion_para_capitulos_sin_tabla_cargada(self, capitulo):
-        """Principio XI: sin tabla oficial no se calcula, se falla explícito."""
-        with pytest.raises(NotImplementedError, match="No existe motor de ponderación"):
-            calcular_diagnostico(capitulo, _respuestas_de_relleno())
+class TestCalculoPorCapitulo:
+    """Capítulos I y II usan la misma Tabla de Valores (Art. 27); los ítems no
+    aplicables se otorgan automáticamente con puntaje máximo (Art. 27 parágrafo 2)."""
+
+    def test_capitulo_ii_todo_cumplimiento_da_100_porciento(self):
+        # Los 21 aplicables cumplen; los 39 restantes se otorgan automáticamente.
+        resultado = calcular_diagnostico("Capítulo II", _respuestas_aplicables("Capítulo II"))
+        assert isinstance(resultado, ResultadoDiagnosticoCapituloIII)
+        assert resultado.capitulo == "Capítulo II"
+        assert resultado.porcentaje == pytest.approx(1.0)
+        assert resultado.total_obtenido == pytest.approx(1.0)
+
+    def test_capitulo_ii_evalua_los_60_items_de_la_tabla(self):
+        resultado = calcular_diagnostico("Capítulo II", _respuestas_aplicables("Capítulo II"))
+        assert len(resultado.items) == 60
+        assert resultado.total_posible == pytest.approx(1.0)
+
+    def test_capitulo_ii_no_aplica_automatico_con_puntaje_y_justificacion(self):
+        resultado = calcular_diagnostico("Capítulo II", _respuestas_aplicables("Capítulo II"))
+        auto_na = [item for item in resultado.items if item.automatico]
+        assert len(auto_na) == 39  # 60 tabla - 21 aplicables
+        assert all(item.criterio is CriterioCalificacion.NO_APLICA for item in auto_na)
+        assert all(item.puntos_obtenidos == pytest.approx(item.valor_item) for item in auto_na)
+        assert all(item.justificacion.strip() for item in auto_na)
+
+    def test_capitulo_ii_un_no_cumple_baja_el_puntaje(self):
+        respuestas = _respuestas_aplicables("Capítulo II", con={"4.1.1": ("NC", "")})
+        resultado = calcular_diagnostico("Capítulo II", respuestas)
+        assert resultado.porcentaje == pytest.approx(1.0 - 0.04)
+
+    def test_capitulo_ii_no_aplica_manual_exige_justificacion(self):
+        respuestas = _respuestas_aplicables("Capítulo II", con={"4.1.1": ("NA", "")})
+        with pytest.raises(ValueError, match="justificación"):
+            calcular_diagnostico("Capítulo II", respuestas)
+
+    def test_capitulo_ii_faltan_aplicables_lanzan_error(self):
+        respuestas = _respuestas_aplicables("Capítulo II", excepto={"4.1.1", "1.1.1"})
+        with pytest.raises(ValueError, match="faltan 2"):
+            calcular_diagnostico("Capítulo II", respuestas)
+
+    def test_capitulo_ii_item_no_aplicable_respondido_manualmente_error(self):
+        # 4.2.2 NO aplica al Capítulo II (Art. 9): el motor lo rechaza porque debe
+        # otorgarse automáticamente, no responderse.
+        respuestas = _respuestas_aplicables("Capítulo II")
+        respuestas["4.2.2"] = ("NC", "")
+        with pytest.raises(ValueError, match="no aplicables al Capítulo II"):
+            calcular_diagnostico("Capítulo II", respuestas)
+
+    def test_capitulo_i_todo_cumplimiento_da_100_porciento(self):
+        resultado = calcular_diagnostico("Capítulo I", _respuestas_aplicables("Capítulo I"))
+        assert resultado.capitulo == "Capítulo I"
+        assert resultado.porcentaje == pytest.approx(1.0)
+        assert len([item for item in resultado.items if item.automatico]) == 53
+
+    def test_capitulo_desconocido_lanza_error(self):
+        with pytest.raises(ValueError, match="no soportado"):
+            calcular_diagnostico("Capítulo IV", _respuestas_de_relleno())
 
     def test_capitulo_iii_se_calcula_tambien_via_dispatcher(self):
         resultado = calcular_diagnostico("Capítulo III", _respuestas_de_relleno())

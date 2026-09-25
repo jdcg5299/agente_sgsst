@@ -1,31 +1,41 @@
 """
-Diagnóstico inicial FT-SST-001 — hallazgos 5.3 y 5.4 de CONSTITUTION.md.
+Diagnóstico inicial FT-SST-001 — hallazgos 5.3 y 5.4 de CONSTITUTION.md, y modelo oficial.
 
 Antes: este archivo solo maquetaba una tabla HTML con columnas C/NC/NA vacías,
 parseando `docs/tabla_ponderacion_resolucion_0312.md` línea por línea en runtime
-(hallazgos 5.4) y sin calcular NINGÚN puntaje (hallazgo 5.3).
+(hallazgos 5.4) y sin calcular NINGÚN puntaje (hallazgo 5.3). Para Capítulos I y II,
+ni siquiera había descripciones oficiales (solo numerales y "(pendiente tabla oficial)").
 
 Ahora:
 - La fuente de datos es el motor de dominio `src/domain/ponderacion.py` (JSON
-  estructurado, no re-parseado del Markdown en cada ejecución).
+  estructurado con la Tabla de Valores oficial — Art. 27 y Anexo 1).
+- Se usa la MISMA tabla de 60 ítems para los tres capítulos. En Cap. I y II los
+  ítems no aplicables (Arts. 3 y 9) se otorgan automáticamente como "No Aplica"
+  con puntaje máximo (Art. 27 parágrafo 2) y se muestran SIN resaltado amarillo.
 - Si el contexto trae respuestas guardadas, se CALCULA el puntaje real
   (sumatoria por cumplimiento + "No aplica" que otorga puntaje completo).
 - No se inventan resultados: sin respuestas completas, el informe queda
-  explícitamente "pendiente de evaluación"; nunca se pinta amarillo nada
-  sin una justificación real (Principio XI).
+  explícitamente "pendiente de evaluación" (Principio XI).
 """
 import os
 from datetime import datetime
 
 from agente_sgsst.domain.clasificacion import clasificar_empresa, get_applicable_items
-from agente_sgsst.domain.ponderacion import calcular_diagnostico_capitulo_iii, cargar_estandares_capitulo_iii
+from agente_sgsst.domain.ponderacion import calcular_diagnostico, cargar_estandares_capitulo_iii
 from agente_sgsst.rendering.maquetador import get_header_ft_sst_002
 
 
-def _filas_capitulo_iii(respuestas):
-    """Construye las filas de la tabla para Capítulo III y opcionalmente el puntaje."""
+def _filas_tabla(capitulo, respuestas):
+    """Construye las 60 filas de la Tabla de Valores y, si hay respuestas, el puntaje.
+
+    Solo los numerales APLICABLES del capítulo requieren respuesta manual; los no
+    aplicables (empresas <50 trabajadores, riesgo I/II/III) se otorgan automáticamente
+    como "No Aplica" con puntaje completo y NO se resaltan en amarillo (no son una
+    omisión del evaluador, sino la regla del Art. 27 parágrafo 2).
+    """
     items = cargar_estandares_capitulo_iii()
-    resultado = calcular_diagnostico_capitulo_iii(respuestas) if respuestas else None
+    aplicables = get_applicable_items(capitulo)
+    resultado = calcular_diagnostico(capitulo, respuestas) if respuestas else None
     filas = []
     n = 1
     for item in sorted(items.values(), key=lambda it: (it.estandar_num, it.numeral)):
@@ -39,7 +49,10 @@ def _filas_capitulo_iii(respuestas):
                 celda_nc = "X"
             else:
                 celda_na = "X"
-                estilo = ' style="background-color: yellow;"'
+                # Amarillo solo para "No Aplica" manual (hallazgo a verificar por el
+                # evaluador), NO para el "No Aplica" automático de la norma.
+                if not resultado_item.automatico:
+                    estilo = ' style="background-color: yellow;"'
         filas.append(
             f'  <tr{estilo}><td>{n}</td><td>{item.numeral}</td>'
             f'<td>{item.descripcion}</td><td>{item.valor_item * 100:.2f}%</td>'
@@ -47,18 +60,6 @@ def _filas_capitulo_iii(respuestas):
         )
         n += 1
     return filas, resultado
-
-
-def _filas_genericas(capitulo, aplicables):
-    """Filas sin ponderación oficial (Capítulos I y II) — NUMERALES SOLO, sin cálculos."""
-    # La descripción por numeral no está disponible en las fuentes cargadas;
-    # no se inventa (Principio I). Listamos los numerales aplicables.
-    numeros_soles = sorted(aplicables)
-    return [
-        f'  <tr><td>{i}</td><td>{numeral}</td><td>(pendiente tabla oficial)</td><td>—</td>'
-        f'<td></td><td></td><td></td></tr>'
-        for i, numeral in enumerate(numeros_soles, start=1)
-    ], None
 
 
 def generar_diagnostico_base(contexto):
@@ -70,10 +71,7 @@ def generar_diagnostico_base(contexto):
                   .get('diagnostico', {})
                   .get('respuestas') or None)
 
-    if capitulo == "Capítulo III":
-        filas, resultado = _filas_capitulo_iii(respuestas)
-    else:
-        filas, resultado = _filas_genericas(capitulo, aplicables)
+    filas, resultado = _filas_tabla(capitulo, respuestas)
 
     informe_path = "sistema_gestion/99_INFORMES_EJECUTIVOS/Diagnostico_Inicial_Resolucion_0312.md"
     header_table = get_header_ft_sst_002(
@@ -86,19 +84,43 @@ def generar_diagnostico_base(contexto):
     matriz_html += "\n".join(filas)
     matriz_html += "\n</table>"
 
+    nombres_articulo = {
+        "Capítulo I": "Artículo 3",
+        "Capítulo II": "Artículo 9",
+        "Capítulo III": "Artículo 16",
+    }
+    n_aplicables = len(aplicables)
+
     if resultado is not None:
+        n_manuales = resultado.aplicables
+        n_auto_na = len(resultado.items) - n_manuales
         resumen = (
-            f"### Resultado del diagnóstico (Capítulo III)\n\n"
+            f"### Resultado del diagnóstico ({capitulo})\n\n"
             f"- Puntaje obtenido: **{resultado.porcentaje * 100:.2f}%**\n"
-            f"- Ítems evaluados: {len(resultado.items)} / 60\n"
         )
+        if capitulo == "Capítulo III":
+            resumen += f"- Ítems evaluados: {len(resultado.items)} / 60\n"
+        else:
+            resumen += (
+                f"- Ítems evaluados: {n_manuales} / {n_aplicables} aplicables "
+                f"({nombres_articulo[capitulo]}); {n_auto_na} ítems no aplicables "
+                "otorgados automáticamente con puntaje máximo (Art. 27, parágrafo 2).\n"
+            )
         nota_estado = ""
     else:
-        resumen = (
-            "### Evaluación pendiente\n\n"
-            "_El diagnóstico de Capítulo III requiere las respuestas C/NC/NA de los 60 ítems "
-            "para calcular el puntaje. Sin ellas no se calcula (Principio XI de CONSTITUTION.md)._"
-        )
+        if capitulo == "Capítulo III":
+            resumen = (
+                "### Evaluación pendiente\n\n"
+                "_El diagnóstico de Capítulo III requiere las respuestas C/NC/NA de los 60 ítems "
+                "para calcular el puntaje. Sin ellas no se calcula (Principio XI de CONSTITUTION.md)._"
+            )
+        else:
+            resumen = (
+                "### Evaluación pendiente\n\n"
+                f"_El diagnóstico de {capitulo} requiere marcar C/NC/NA en los {n_aplicables} ítems "
+                f"aplicables ({nombres_articulo[capitulo]}). Los {60 - n_aplicables} ítems no aplicables "
+                "se otorgarán automáticamente con puntaje máximo (Art. 27, parágrafo 2) al calcular._"
+            )
         nota_estado = "Pendiente de evaluación"
 
     contexto.setdefault('estado_sistema', {})
