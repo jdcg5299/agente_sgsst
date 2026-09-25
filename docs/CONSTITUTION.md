@@ -41,10 +41,11 @@ Ningún componente determinista (`clasificacion.py`, el futuro motor de ponderac
 ## 3. Reglas de dominio (sin cambios respecto a v1.0)
 
 - Clasificación: Cap. I ≤10 trab. + riesgo I–III · Cap. II 11–50 + riesgo I–III · Cap. III >50 trab. **o** riesgo IV–V con cualquier tamaño.
-- Ponderación Cap. III: 60 ítems, 100%, distribución 10/15/20/30/10/5/10% por estándar (ver `tabla_ponderacion_resolucion_0312.md`).
-- Regla "No aplica": otorga el puntaje completo del ítem + resaltado amarillo, siempre con justificación.
-- **Limitación conocida, sin resolver todavía**: no existen fuentes cargadas con la ponderación oficial propia de Capítulo I (7 ítems) ni Capítulo II (21 ítems) — esos capítulos tienen anexos de ponderación distintos a la tabla de 60 ítems. Cualquier motor de ponderación debe rechazar explícitamente el cálculo para Cap. I/II, no inventar porcentajes.
-- **Discrepancia sin resolver**: el checklist de Capítulo II lista 22 ítems, no 21 como indica su propio encabezado. `clasificacion.py` heredó ese error sin detectarlo. Hay que decidir cuál de los 22 sobra, contra el anexo oficial real de la Resolución 0312/2019 (no contra el checklist cargado, que ya demostró tener el error).
+- Ponderación: existe UNA sola Tabla de Valores de 60 ítems (Art. 27 y Anexo 1) que rige los tres capítulos, distribuida 10/15/20/30/10/5/10% por estándar. La fuente única de verdad es `src/domain/data/estandares_0312_capitulo_iii.json` (alineada al anexo oficial; `docs/tabla_ponderacion_resolucion_0312.md` quedó como referencia secundaria con divergencias ya corregidas en el JSON).
+- Ítems aplicables por capítulo: Cap. I = 7 (Art. 3), Cap. II = 21 (Art. 9), Cap. III = 60 (Art. 16), mapeados 1:1 a los numerales de la Tabla de Valores en `clasificacion.py`.
+- Regla "No aplica": otorga el puntaje completo del ítem + resaltado amarillo, siempre con justificación. Para empresas de menos de 50 trabajadores con riesgo I–III (Cap. I y II), los ítems NO aplicables se otorgan AUTOMÁTICamente con el porcentaje máximo en la columna "No Aplica" (Art. 27, parágrafo 2) — no requieren respuesta manual ni se resaltan en amarillo.
+- ✅ **Resuelto (2026-09-25)**: cargada la tabla oficial de ponderación que también aplica a Capítulos I y II. No existen "anexos de ponderación propios" por capítulo: el modelo oficial es la Tabla de Valores única + conjunto aplicable (Arts. 3 y 9) + "No Aplica" automático (Art. 27). El motor de ponderación calcula los tres capítulos.
+- ✅ **Resuelto (2026-09-25)**: la discrepancia 21 vs 22 de Capítulo II quedó conciliada contra el anexo oficial real. El Art. 9 lista 21 estándares; los 22 del checklist eran numeración propia del checklist, no numerales de la Tabla de Valores. `CAPITULO_II_CONTEO_VERIFICADO = True`.
 
 ---
 
@@ -122,6 +123,7 @@ Prioridad: **P0** bloquea uso en producción · **P1** corregir antes de escalar
 | 5.14 | **P0** | `clasificacion.py` + `ingesta.py` | Ni la clasificación ni la ingesta validan `total_trabajadores <= 0` de forma explícita — `ingesta.py` acepta 0 trabajadores como válido (`>= 0`), y con 0 trabajadores + riesgo ≤3, `clasificar_empresa` devuelve silenciosamente "Capítulo I". | Una empresa con 0 trabajadores no es un caso de negocio válido y debe rechazarse en el borde de entrada, no clasificarse como si fuera válida (ver Principio XI). |
 | 5.15 | **P1** | `gdrive_sync.py` | Usa `pickle` para persistir el token OAuth en disco sin cifrar (`token.pickle`), y no hay `.gitignore` visible en los archivos entregados que lo excluya. | Riesgo de fuga de credenciales si el repo se sube sin excluir estos archivos (ver Principio X, nuevo). |
 | 5.16 | **P2** | Todo el proyecto | Cero archivos de test en los 11 archivos subidos. | Sin tests, cada uno de los hallazgos anteriores pudo (y de hecho pasó) desapercibido. Antes de seguir agregando funcionalidad, `tests/domain/test_clasificacion.py` y `tests/domain/test_ponderacion.py` son el punto de entrada obligatorio (ver Sección 7). |
+| 5.17 | **P1** | `estandares_0312_capitulo_iii.json` (+ `docs/tabla_ponderacion_resolucion_0312.md`) | La tabla maestra cargada divergía del Anexo 1 oficial de la Res. 0312/2019 en 2 valores (2.5.1 estaba 1% → oficial 2%; 2.11.1 estaba 2% → oficial 1%) y en grupos enteros: 3.1 usaba la numeración/descripciones del checklist (con "tareas de alto riesgo" inexistente en el anexo) en vez de los 9 numerales oficiales (3.1.1 = "Descripción sociodemográfica – Diagnóstico de condiciones de salud"), y 4.2 estaba en orden y redacción propios (faltaban 4.2.2 "Verificación de aplicación de medidas" y 4.2.6 "Entrega de EPP"). | **Verificado contra el PDF del Anexo 1** (`table_pct_mins/pct_max`). Enfrascado en el diff con `tabla_ponderacion_resolucion_0312.md` para decidir el caso 3.2.1; resuelto inclinándose al anexo oficial (1%) cuando el checklist trae otro valor. Sin esta corrección, cualquier puntaje de Cap. I/II/III saldría con valores errados. |
 
 ### Estado de resolución — verificado 2026-09-11
 
@@ -131,27 +133,28 @@ Prioridad: **P0** bloquea uso en producción · **P1** corregir antes de escalar
 
 | Hallazgo | Estado | Verificación |
 |---|---|---|
-| 5.1, 5.2, 5.12, 5.13, 5.14 | ✅ Resuelto | `tests/domain/test_clasificacion.py` (21 tests) + diagnóstico Cap. III verificado manualmente |
-| 5.3, 5.4 | ✅ Resuelto | `tests/domain/test_ponderacion.py` (17 tests); `diagnostico.py` ya no parsea el `.md` en runtime |
+| 5.1, 5.2, 5.12, 5.13, 5.14 | ✅ Resuelto | `tests/domain/test_clasificacion.py` (22 tests) + diagnóstico Cap. III verificado manualmente; 5.2 conciliado contra el anexo oficial (Art. 9 = 21) el 2026-09-25 |
+| 5.17 | ✅ Resuelto (2026-09-25) | JSON maestro reescrito al Anexo 1 oficial (pesos corregidos, grupos 3.1/4.2 descritos y numerados como el anexo) |
+| 5.3, 5.4 | ✅ Resuelto | `tests/domain/test_ponderacion.py` (24 tests); `diagnostico.py` ya no parsea el `.md` en runtime; motor de ponderación extendido a los 3 capítulos con "No Aplica" automático (Art. 27 pár. 2) |
 | 5.5 | ✅ Resuelto | `tests/generation/test_prompt_registry.py`; `generador.py` resuelve prompts solo vía `master_prompts.md` |
 | 5.6 | ✅ Resuelto | `tests/rendering/test_converter.py`; el fallback crea tablas Word reales |
 | 5.7 | ✅ Resuelto | `converter.py` ya no usa el acta con PII como `reference_doc` por defecto |
 | 5.8 | ✅ Resuelto | `get_header_ft_sst_002(..., fecha=)` recibe la fecha desde la orquestación |
 | 5.15 | ✅ Resuelto | `.gitignore` excluye `.env`, `credentials.json`, `token.pickle`, `data/contexto_empresa.json`, `sistema_gestion/` |
-| 5.16 | ✅ Resuelto | Existen `tests/domain/`, `tests/generation/`, `tests/rendering/` (49 tests totales) |
-| 5.9 | 🔲 Pendiente | Logo institucional: falta captura en `ingesta.py` e inserción en la celda del encabezado |
-| 5.10 | 🔲 Pendiente | Registro único de códigos `FT-SST-XXX` antes de completar el catálogo a 60 |
-| 5.11 | 🔲 Pendiente | Decisión explícita filtrar-por-capítulo vs. set completo |
+| 5.16 | ✅ Resuelto | Existen `tests/domain/`, `tests/generation/`, `tests/rendering/`, `tests/cli/`, `tests/generador/` (≥75 tests) |
+| 5.9 | ✅ Resuelto (2026-09-13) | `ingesta.py` captura el logo (PNG/JPG) en `empresa['logo']`; `maquetador.py` lo incrusta como `![Logo](ruta)`; `converter.py` lo inserta como imagen real en la celda del encabezado (tests en `tests/rendering/`) |
+| 5.10 | ✅ Resuelto (2026-09-13) | Catálogo completo con los 60 documentos desde `docs/catalogo_documental.md`; códigos `FT-SST-XXX` normalizados (FT-SST-001 Diagnóstico, FT-SST-002 Acta del Responsable) |
+| 5.11 | ✅ Resuelto (2026-09-13) | `documentos_aplicables_por_capitulo()` filtra estricto por capítulo (Cap I=11, Cap II=25, Cap III=60) usando `get_applicable_items()`; siempre incluye Diagnóstico e informes ejecutivos |
 
 ---
 
 ## 6. Reglas de negocio pendientes de implementar
 
-1. **Captura y embebido de logo institucional** (input obligatorio #1, hoy ausente por completo — hallazgo 5.9).
-2. **Extracción automática desde RUT/Cámara de Comercio** (Razón Social, NIT, Dirección, Representante Legal, Actividad Económica) — hoy `ingesta.py` es 100% manual vía `input()`. Requiere una skill de lectura de PDF/imagen (`file-reading`/`pdf-reading`, ya disponibles) + extracción estructurada.
-3. **Registro único de códigos de documento** (`FT-SST-XXX`) que resuelva la colisión del hallazgo 5.10 antes de completar el catálogo de 60 documentos.
-4. **Decisión explícita** sobre si `generar_documentos_por_capitulo()` filtra por capítulo aplicable o siempre genera el set completo (hallazgo 5.11).
-5. **Motor de ponderación real** (`src/domain/ponderacion.py`) — hoy `diagnostico.py` no calcula nada (hallazgo 5.3).
+1. ✅ **Captura y embebido de logo institucional** (hallazgo 5.9) — resuelto en 2026-09-13.
+2. ✅ **Extracción automática desde RUT/Cámara de Comercio** (Razón Social, NIT, Dirección, Representante Legal, Actividad Económica) — resuelto en 2026-09-13 en `cli/rut.py` (extracción best-effort vía `pypdf`; los campos no detectados se piden manualmente).
+3. ✅ **Registro único de códigos de documento** (`FT-SST-XXX`) y catálogo completo de 60 documentos (hallazgo 5.10) — resuelto en 2026-09-13.
+4. ✅ **Decisión explícita sobre filtrado por capítulo** — resuelto en 2026-09-13: se genera solo lo estricto del capítulo aplicable más Diagnóstico e informes ejecutivos (hallazgo 5.11).
+5. ✅ **Motor de ponderación real** (`src/agente_sgsst/domain/ponderacion.py`) — resuelto (hallazgo 5.3).
 
 ---
 
