@@ -14,7 +14,13 @@ import os
 import re
 import subprocess
 
+from docx.shared import Cm
+
+from agente_sgsst.rendering.maquetador import _IMAGEN_MARKDOWN
+
 _COLUMNA_SEPARADOR = re.compile(r"^:?-+:?$")
+
+ANCHO_IMAGEN_LOGO_CM = 2.8
 
 # El acta real con PII ya NO es el reference_doc por defecto (hallazgo 5.7).
 # Un reference_doc solo aporta estilos y NO debe arrastrar datos de una persona.
@@ -82,6 +88,29 @@ def _parsear_tabla(filas: list[str]) -> list[list[str]]:
     return tabla
 
 
+def _ruta_imagen_markdown(texto: str) -> str | None:
+    """Si `texto` es una imagen Markdown `![alt](ruta)`, devuelve la ruta; si no, None."""
+    match = _IMAGEN_MARKDOWN.match(texto.strip())
+    if match:
+        return match.group(2)
+    return None
+
+
+def _insertar_imagen_en_celda(celda, ruta_imagen: str):
+    """Incrusta la imagen del logo en la celda de la cabecera FT-SST-002."""
+    import os as _os
+
+    if not _os.path.exists(ruta_imagen):
+        celda.text = f"[Logo no encontrado: {ruta_imagen}]"
+        return
+    parrafo = celda.paragraphs[0]
+    run = parrafo.add_run()
+    try:
+        run.add_picture(ruta_imagen, width=Cm(ANCHO_IMAGEN_LOGO_CM))
+    except Exception as e:
+        parrafo.text = f"[Logo no insertable: {str(e)}]"
+
+
 def _convertir_con_python_docx(md_path, docx_path):
     """
     Conversor nativo sin Pandoc usando python-docx.
@@ -133,12 +162,24 @@ def _convertir_con_python_docx(md_path, docx_path):
                     for i_fila, fila in enumerate(tabla):
                         for j_celda, celda in enumerate(fila):
                             parrafo = tabla_doc.rows[i_fila].cells[j_celda].paragraphs[0]
+                            ruta_imagen = _ruta_imagen_markdown(celda)
+                            if ruta_imagen is not None:
+                                _insertar_imagen_en_celda(tabla_doc.rows[i_fila].cells[j_celda], ruta_imagen)
+                                continue
                             run = parrafo.add_run(celda)
                             if i_fila == 0:
                                 run.bold = True
                 continue  # n ya avanzado dentro del agrupamiento
-            elif linea:
-                doc.add_paragraph(linea)
+            else:
+                ruta_imagen = _ruta_imagen_markdown(linea)
+                if ruta_imagen is not None:
+                    parrafo = doc.add_paragraph()
+                    try:
+                        parrafo.add_run().add_picture(ruta_imagen, width=Cm(ANCHO_IMAGEN_LOGO_CM))
+                    except Exception as e:
+                        parrafo.add_run(f"[Imagen no insertable: {str(e)}]")
+                else:
+                    doc.add_paragraph(linea)
 
             n += 1
 
