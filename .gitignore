@@ -12,9 +12,14 @@ wheels/
 # Secrets and environment files (Principio X)
 .env
 credentials.json
+Credentials.json
 token.pickle
 
 # Generated data and outputs
 data/contexto_empresa.json
+data/*.png
+data/*.jpg
+data/*.jpeg
 sistema_gestion/
+.gdrive_cache.json
 
