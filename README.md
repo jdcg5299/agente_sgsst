@@ -37,7 +37,7 @@ Clasifica el capítulo aplicable de la Resolución 0312 de 2019, calcula el diag
   - Sin valores por defecto silenciosos: entradas incompletas o inválidas lanzan excepción (Principio XI).
 - **Diagnóstico oficial en Excel**: el `.xlsx` replica el instrumento `docs/Diagnostico Resolucion 0312 de 2019 - 2026.xls` — 11 columnas (Ciclo, Numeral, Ítem, Criterio, Modo de verificación, Valor del ítem, Peso porcentual, Puntaje Posible ×3, Calificación), jerarquía estándar → bloque → ítems y cierre con "PORCENTAJE TOTAL DEL ESTANDAR" por bloque, "SUMA TOTAL", "SUMA TOTAL DE LOS ESTANDRES MINIMOS" y nivel del Art. 27. `tests/domain/test_fidelidad_instrumento.py` lo contrasta celda a celda contra el `.xls`, así que el texto y los pesos no pueden divergir del instrumento firmado. El `.md` queda solo como vista previa web; el diagnóstico **no** se entrega en `.docx`.
 - **Generación híbrida de documentos**: plantillas + LLM, con el prompt resuelto únicamente desde `docs/master_prompts.md` (sin prompts embebidos en el código).
-- **Exportación dual**: Markdown (.md) y Word (.docx), con encabezado estandarizado FT-SST-002.
+- **Exportación dual**: Markdown (.md) y Word (.docx), con encabezado estandarizado FT-SST-002. La conversión a `.docx` es nativa con `python-docx` (determinista, sin depender de Pandoc).
 - **Word fiel al formato oficial**: los `.docx` se generan a partir de la plantilla `docs/plantilla_ft_sst_002.docx` (header de sección fusionado, pie `Elaboró/Revisó/Aprobó`, Times New Roman 12pt, Letter, márgenes 3 cm) con el logo, la razón social, fecha y datos de la empresa insertados dinámicamente por documento.
 - **Estructura de carpetas PHVA** (Planear–Hacer–Verificar–Actuar) como contrato de salida.
 - **Sincronización opcional con Google Drive** (OAuth 2.0).
@@ -88,7 +88,7 @@ Agente_SGSST/
 │   │   ├── rendering/                 # Maquetación y exportación
 │   │   │   ├── maquetador.py          #   Encabezado FT-SST-002 (Markdown)
 │   │   │   ├── docx_plantilla.py      #   Render .docx fiel a plantilla FT-SST-002
-│   │   │   ├── converter.py           #   Markdown -> .docx (Pandoc o python-docx)
+│   │   │   ├── converter.py           #   Markdown -> .docx (nativo python-docx, determinista)
 │   │   │   ├── excel_diagnostico.py   #   Diagnóstico FT-SST-001 .xlsx (instrumento oficial)
 │   │   │   └── diagnostico.py         #   Informe FT-SST-001 (.xlsx oficial + .md vista previa)
 │   │   ├── integrations/
@@ -97,7 +97,7 @@ Agente_SGSST/
 │   │       ├── main.py                #   Menú interactivo
 │   │       ├── ingesta.py             #   Captura de datos de la empresa
 │   │       └── rut.py                 #   Parser RUT/Cámara de Comercio (pypdf)
-└── tests/                             # pytest (161 tests)
+└── tests/                             # pytest (163 tests)
     ├── domain/
     │   ├── test_clasificacion.py      # TDD del bug 5.1 (22 tests)
     │   ├── test_ponderacion.py        # Motor de ponderación (30 tests)
@@ -108,7 +108,7 @@ Agente_SGSST/
     ├── rendering/
     │   ├── test_diagnostico.py        # Entrega .xlsx + paridad con el .md (18 tests)
     │   ├── test_excel_diagnostico.py  # Instrumento oficial en .xlsx (32 tests)
-    │   ├── test_converter.py          # Fallback python-docx + logo (9 tests)
+    │   ├── test_converter.py          # Conversor nativo .docx (11 tests)
     │   ├── test_docx_plantilla.py     # Render .docx fiel a plantilla (3 tests)
     │   └── test_maquetador.py         # Encabezado FT-SST-002 + logo (4 tests)
     ├── cli/
@@ -121,7 +121,7 @@ Agente_SGSST/
 
 - **Python ≥ 3.11**
 - **uv** (gestor de proyectos). En Windows: `winget install astral-sh.uv` · macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **Pandoc** (opcional, recomendado) para conversión Markdown → .docx con estilos. Si no está, se usa el conversor nativo `python-docx`.
+- **Pandoc**: ya no se requiere. La conversión Markdown → .docx es nativa con `python-docx` para obtener una salida determinista en cualquier entorno.
 
 ## Instalación y configuración
 
@@ -261,9 +261,9 @@ uv run ruff check .  # o: make lint
 
 La suite cubre:
 
-- **`tests/domain/`** → clasificación de capítulo y motor de ponderación (38 tests, TDD de los hallazgos P0 5.1 y 5.3).
-- **`tests/generation/`** → registro de prompts (7 tests, hallazgo P0 5.5).
-- **`tests/rendering/`** → conversión Markdown → .docx, encabezado FT-SST-002, logo y renderizado con plantilla Word (12 tests, hallazgos P1 5.6, 5.8, 5.9 + plantilla `docx_plantilla`).
+- **`tests/domain/`** → clasificación de capítulo y motor de ponderación (68 tests: 22 clasificación + 30 ponderación + 16 de fidelidad al instrumento oficial, TDD de los hallazgos P0 5.1 y 5.3).
+- **`tests/generation/`** → registro de prompts y cliente LLM (11 tests, hallazgo P0 5.5 + reintentos 429).
+- **`tests/rendering/`** → conversión determinista Markdown → .docx, diagnóstico .xlsx oficial, encabezado FT-SST-002, logo y plantilla Word (68 tests, hallazgos P1 5.6, 5.7, 5.8, 5.9 + `docx_plantilla`).
 - **`tests/cli/`** → parser de RUT / Cámara de Comercio (9 tests, Fase 1.2).
 - **`tests/generador/`** → catálogo de 60 documentos y filtrado por capítulo (7 tests, hallazgos 5.10 y 5.11).
 
@@ -300,11 +300,12 @@ El `.gitignore` los excluye explícitamente. No ejecutes `git add -A` sin revisa
 
 ## Proyectos pendientes
 
-Verifica el estado vigente en [`docs/CONSTITUTION.md` §5](docs/CONSTITUTION.md). Resumen:
+El backlog de [`docs/CONSTITUTION.md` §5](docs/CONSTITUTION.md) (hallazgos 5.1–5.17) está **resuelto y verificado** con tests. Hitos recientes:
 
-- **5.9** — Captura e inserción del logo institucional en el encabezado.
-- **5.10** — Registro único de códigos `FT-SST-XXX` antes de completar el catálogo a 60 documentos.
-- **5.11** — Decisión explícita sobre filtrar por capítulo vs. generar el set completo.
+- **Diagnóstico oficial en Excel (FT-SST-001)**: `.xlsx` con las 11 columnas y pesos del instrumento Res. 0312 (motor de ponderación para los 3 capítulos, hallazgos 5.3, 5.4 y 5.17).
+- **Conversión .docx determinista**: `converter.py` es nativo `python-docx` y ya no depende de Pandoc ni de `reference_doc` (sin riesgo de PII, hallazgos 5.6 y 5.7).
+
+No hay hallazgos P0/P1 abiertos. La recomendación pendiente de la Sección 7 (generación `docx` directa vía skill en vez del parser línea por línea) se concretó como conversor nativo determinista. Los nuevos hallazgos se registran en [`docs/CONSTITUTION.md` §5](docs/CONSTITUTION.md).
 
 ## Licencia
 

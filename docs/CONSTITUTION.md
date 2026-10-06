@@ -155,6 +155,7 @@ Prioridad: **P0** bloquea uso en producción · **P1** corregir antes de escalar
 3. ✅ **Registro único de códigos de documento** (`FT-SST-XXX`) y catálogo completo de 60 documentos (hallazgo 5.10) — resuelto en 2026-09-13.
 4. ✅ **Decisión explícita sobre filtrado por capítulo** — resuelto en 2026-09-13: se genera solo lo estricto del capítulo aplicable más Diagnóstico e informes ejecutivos (hallazgo 5.11).
 5. ✅ **Motor de ponderación real** (`src/agente_sgsst/domain/ponderacion.py`) — resuelto (hallazgo 5.3).
+6. ✅ **Conversión .docx determinista sin Pandoc** (`converter.py` nativo `python-docx`, sin `reference_doc`) — resuelto en 2026-10-06 (recomendación `docx` de la Sección 7).
 
 ---
 
@@ -169,7 +170,7 @@ Prioridad: **P0** bloquea uso en producción · **P1** corregir antes de escalar
 | `domain-modeling` | `mattpocock/skills` | Guía la separación `src/domain/` vs `src/generation/` vs `src/rendering/` de la Sección 4. |
 | `writing-plans` + `executing-plans` | `obra/superpowers` | Usar para trabajar el backlog de la Sección 5 en orden (P0 primero), un plan por hallazgo, no todo a la vez. |
 | `resolving-merge-conflicts` | `mattpocock/skills` | Útil en cuanto se muevan los 8 archivos de `src/` plano a los subpaquetes nuevos — es una reorganización de archivos con alto riesgo de conflicto si hay más de una rama activa. |
-| `docx` / `xlsx` / `pdf` (nativas) | Claude/OpenCode | Reemplazar el conversor manual de `converter.py` (hallazgo 5.6) por generación directa con la skill `docx`, que ya maneja tablas e imágenes correctamente en vez del parser de Markdown línea por línea. |
+| `docx` / `xlsx` / `pdf` (nativas) | Claude/OpenCode | ✅ Concretado en 2026-10-06: `converter.py` es ahora un conversor nativo `python-docx` determinista (tablas e imágenes reales, sin Pandoc ni `reference_doc` con PII), reemplazando el parser de Markdown línea por línea más la rama externa. |
 
 ---
 
