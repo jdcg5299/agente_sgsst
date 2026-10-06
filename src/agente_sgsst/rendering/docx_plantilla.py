@@ -6,6 +6,7 @@ rellena dinámicamente las celdas del encabezado (código, estándar, nombre, fe
 actualiza el pie de página con el responsable y representante legal, y renderiza
 el contenido Markdown generado por la IA en el cuerpo del documento.
 """
+
 import os
 from datetime import datetime
 from docx import Document
@@ -111,12 +112,15 @@ def _parsear_tabla_md(filas):
 def _parsear_tabla_html(filas):
     """Parsea una tabla HTML plana (<tr><td>) a matriz limpia [][str]."""
     import re
+
     tabla = []
     for f in filas:
         f_str = f.strip()
         if "<tr>" not in f_str:
             continue
-        celdas = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", f_str, re.S)]
+        celdas = [
+            re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", f_str, re.S)
+        ]
         if celdas:
             tabla.append(celdas)
     return tabla

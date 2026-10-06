@@ -6,6 +6,7 @@ para autocompletar el contexto (razon_social, nit, direccion,
 representante_legal, actividad_economica). Si un campo no puede determinarse,
 se devuelve vacío y la ingesta interactiva lo solicita manualmente.
 """
+
 from __future__ import annotations
 
 import os
@@ -45,7 +46,9 @@ def _valor_de_clave(lineas: list[str], clave: str) -> str:
             return resto[1].strip()
         if i + 1 < len(lineas):
             siguiente = lineas[i + 1]
-            if len(siguiente) > 2 and not any(re.search(p, siguiente.lower()) for p in _CLAVES_TEXTO.get(clave, ())):
+            if len(siguiente) > 2 and not any(
+                re.search(p, siguiente.lower()) for p in _CLAVES_TEXTO.get(clave, ())
+            ):
                 return siguiente
         return ""
     return ""

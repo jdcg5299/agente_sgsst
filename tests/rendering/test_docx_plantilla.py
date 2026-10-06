@@ -10,7 +10,10 @@ def test_generar_docx_ft_sst_002():
         docx_path = os.path.join(tmpdir, "test.docx")
 
         with open(md_path, "w", encoding="utf-8") as f:
-            f.write("# Título de Prueba\n\nEste es un párrafo de prueba.\n\n| Col 1 | Col 2 |\n|---|---|\n| Val 1 | Val 2 |\n")
+            f.write(
+                "# Título de Prueba\n\nEste es un párrafo de prueba.\n\n"
+                "| Col 1 | Col 2 |\n|---|---|\n| Val 1 | Val 2 |\n"
+            )
 
         doc_info = {
             "codigo": "FT-SST-001",
@@ -55,11 +58,17 @@ def test_generar_docx_con_tabla_html():
         docx_path = os.path.join(tmpdir, "test_html.docx")
 
         with open(md_path, "w", encoding="utf-8") as f:
-            f.write("<table>\n<tr><th>Numeral</th><th>Valor</th></tr>\n<tr><td>2.3.1</td><td>0.10</td></tr>\n</table>\n")
+            f.write(
+                "<table>\n<tr><th>Numeral</th><th>Valor</th></tr>\n<tr><td>2.3.1</td><td>0.10</td></tr>\n</table>\n"
+            )
 
         doc_info = {"codigo": "FT-SST-001", "estandar": "E2.3.1", "nombre": "Diagnostico"}
         contexto = {
-            "empresa": {"razon_social": "Empresa Test SAS", "nit": "900123456-1", "representante_legal": "Juan Perez"},
+            "empresa": {
+                "razon_social": "Empresa Test SAS",
+                "nit": "900123456-1",
+                "representante_legal": "Juan Perez",
+            },
             "responsable_sst": {"nombre": "Maria Gomez", "cc": "12345678"},
         }
 

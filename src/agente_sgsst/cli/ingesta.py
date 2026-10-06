@@ -56,7 +56,7 @@ def _capturar_datos_desde_rut(contexto):
         extraidos = {k: v for k, v in datos.items() if v}
         if extraidos:
             for campo, valor in extraidos.items():
-                contexto['empresa'][campo] = valor
+                contexto["empresa"][campo] = valor
             print(f"Datos autocompletados desde el PDF: {', '.join(sorted(extraidos))}")
         else:
             print("No se logró extraer datos del PDF. Complete los datos manualmente.")
@@ -68,27 +68,27 @@ def _capturar_datos_desde_rut(contexto):
 def solicitar_datos_usuario(contexto):
     """Solicita los datos de la empresa de forma interactiva."""
     print("\n--- Por favor, proporcione los datos de la empresa ---")
-    
-    contexto['empresa']['logo'] = _capturar_logo()
+
+    contexto["empresa"]["logo"] = _capturar_logo()
     contexto = _capturar_datos_desde_rut(contexto)
 
-    if not contexto['empresa']['razon_social']:
-        contexto['empresa']['razon_social'] = input("Razón Social: ")
-    if not contexto['empresa']['nit']:
-        contexto['empresa']['nit'] = input("NIT: ")
-    if not contexto['empresa']['direccion']:
-        contexto['empresa']['direccion'] = input("Dirección: ")
-    if not contexto['empresa']['representante_legal']:
-        contexto['empresa']['representante_legal'] = input("Representante Legal: ")
-    if not contexto['empresa']['actividad_economica']:
-        contexto['empresa']['actividad_economica'] = input("Actividad Económica Principal: ")
-    
-    contexto['empresa']['clase_riesgo_arl'] = _capturar_riesgo_arl()
-            
+    if not contexto["empresa"]["razon_social"]:
+        contexto["empresa"]["razon_social"] = input("Razón Social: ")
+    if not contexto["empresa"]["nit"]:
+        contexto["empresa"]["nit"] = input("NIT: ")
+    if not contexto["empresa"]["direccion"]:
+        contexto["empresa"]["direccion"] = input("Dirección: ")
+    if not contexto["empresa"]["representante_legal"]:
+        contexto["empresa"]["representante_legal"] = input("Representante Legal: ")
+    if not contexto["empresa"]["actividad_economica"]:
+        contexto["empresa"]["actividad_economica"] = input("Actividad Económica Principal: ")
+
+    contexto["empresa"]["clase_riesgo_arl"] = _capturar_riesgo_arl()
+
     while True:
         try:
-            contexto['empresa']['total_trabajadores'] = int(input("Número total de trabajadores: "))
-            if contexto['empresa']['total_trabajadores'] > 0:
+            contexto["empresa"]["total_trabajadores"] = int(input("Número total de trabajadores: "))
+            if contexto["empresa"]["total_trabajadores"] > 0:
                 break
             print("El número de trabajadores debe ser mayor a 0 (entero positivo).")
         except ValueError:

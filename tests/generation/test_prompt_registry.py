@@ -7,6 +7,7 @@ master_prompts.md"). Estos tests verifican que la resolución de prompts pasa
 única y exclusivamente por el registro, con fallback al prompt GENERICO y
 sin prompts inventados.
 """
+
 from __future__ import annotations
 
 import pytest

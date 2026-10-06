@@ -1,4 +1,5 @@
 """Tests del parser de RUT / Cámara de Comercio (Fase 1.2)."""
+
 from __future__ import annotations
 
 import pytest

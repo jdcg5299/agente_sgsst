@@ -16,6 +16,7 @@ la capa de generación).
 Regla estricta: si `master_prompts.md` falta, no se genera ningun documento —
 fallar ruidosamente es preferible a inventar un prompt (Principio XI).
 """
+
 from __future__ import annotations
 
 import re

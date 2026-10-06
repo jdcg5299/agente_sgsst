@@ -7,6 +7,7 @@ existe — y luego el bloque "Corrección verificada" prueba que el nuevo
 `src/domain/clasificacion.py` ya no lo tiene. Así queda documentado en el propio
 test suite qué se rompía y por qué, no solo que "ahora pasa".
 """
+
 from __future__ import annotations
 
 import pytest
@@ -26,9 +27,28 @@ from agente_sgsst.domain.clasificacion import (
 def _get_applicable_items_original_con_bug(capitulo):
     items_capitulo_1 = {"1.1.1", "1.1.4", "1.2.1", "2.1.1", "2.2.1", "2.4.1", "2.5.1"}
     items_capitulo_2 = {
-        "1.1.1", "1.1.2", "1.1.4", "1.1.6", "1.1.8", "1.2.1",
-        "2.1.1", "2.2.1", "2.3.1", "2.4.1", "2.5.1", "2.6.1", "2.7.1", "2.8.1", "2.11.1",
-        "3.1.1", "3.1.2", "3.2.1", "3.2.2", "3.3.1", "4.1.1", "4.2.1",
+        "1.1.1",
+        "1.1.2",
+        "1.1.4",
+        "1.1.6",
+        "1.1.8",
+        "1.2.1",
+        "2.1.1",
+        "2.2.1",
+        "2.3.1",
+        "2.4.1",
+        "2.5.1",
+        "2.6.1",
+        "2.7.1",
+        "2.8.1",
+        "2.11.1",
+        "3.1.1",
+        "3.1.2",
+        "3.2.1",
+        "3.2.2",
+        "3.3.1",
+        "4.1.1",
+        "4.2.1",
     }
     if capitulo == "Capítulo I":
         return items_capitulo_1
@@ -48,8 +68,8 @@ class TestReproduccionHallazgo51:
         # de Capítulo III -> diagnostico.py los pintaría TODOS de amarillo.
         for numeral in numerales_reales:
             assert numeral not in aplicables_originales, (
-                f"Si esto falla, el bug original ya no está presente en la función "
-                f"de referencia (no debería pasar, es código congelado para el test)"
+                "Si esto falla, el bug original ya no está presente en la función "
+                "de referencia (no debería pasar, es código congelado para el test)"
             )
 
 
@@ -91,11 +111,27 @@ class TestHallazgo52DiscrepanciaCapituloII:
     def test_conjunto_oficial_de_capitulo_ii(self):
         """Los 21 numerales de la Tabla de Valores que corresponden al Art. 9."""
         assert get_applicable_items("Capítulo II") == {
-            "1.1.1", "1.1.3", "1.1.4", "1.1.6", "1.1.8", "1.2.1",
-            "2.1.1", "2.4.1", "2.5.1",
-            "3.1.1", "3.1.2", "3.1.4", "3.1.6", "3.2.1", "3.2.2",
-            "4.1.1", "4.2.5", "4.2.6",
-            "5.1.1", "5.1.2", "6.1.3",
+            "1.1.1",
+            "1.1.3",
+            "1.1.4",
+            "1.1.6",
+            "1.1.8",
+            "1.2.1",
+            "2.1.1",
+            "2.4.1",
+            "2.5.1",
+            "3.1.1",
+            "3.1.2",
+            "3.1.4",
+            "3.1.6",
+            "3.2.1",
+            "3.2.2",
+            "4.1.1",
+            "4.2.5",
+            "4.2.6",
+            "5.1.1",
+            "5.1.2",
+            "6.1.3",
         }
 
     def test_bandera_de_conteo_verificado_es_true(self):
@@ -105,7 +141,13 @@ class TestHallazgo52DiscrepanciaCapituloII:
     def test_capitulo_i_tiene_el_conjunto_oficial(self):
         assert len(get_applicable_items("Capítulo I")) == 7
         assert get_applicable_items("Capítulo I") == {
-            "1.1.1", "1.1.4", "1.2.1", "2.4.1", "3.1.4", "4.1.1", "4.2.1"
+            "1.1.1",
+            "1.1.4",
+            "1.2.1",
+            "2.4.1",
+            "3.1.4",
+            "4.1.1",
+            "4.2.1",
         }
 
 

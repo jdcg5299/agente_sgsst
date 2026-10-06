@@ -1,4 +1,5 @@
 """Tests del catálogo documental (hallazgos 5.10 y 5.11)."""
+
 from __future__ import annotations
 
 from agente_sgsst.generador import (
@@ -20,8 +21,8 @@ class TestCatalogoNormalizado:
             assert doc_id in catalogo
 
     def test_codigo_ft_sst_normalizado(self):
-        assert _codigo_formato("D-001") == "FT-SST-002"   # Acta del Responsable
-        assert _codigo_formato("D-014") == "FT-SST-001"   # Diagnóstico inicial
+        assert _codigo_formato("D-001") == "FT-SST-002"  # Acta del Responsable
+        assert _codigo_formato("D-014") == "FT-SST-001"  # Diagnóstico inicial
         assert _codigo_formato("D-012") == "FT-SST-012"
         assert _codigo_formato("D-036") == "FT-SST-036"
         assert _codigo_formato("D-060") == "FT-SST-060"
@@ -48,7 +49,9 @@ class TestFiltradoPorCapitulo:
             "D-036",  # 4.1.1 Identificación de peligros (IPARV)
             "D-040",  # 4.2.1 Medidas de prevención y control
             "D-014",  # Diagnóstico (siempre)
-            "D-058", "D-059", "D-060",  # Informes ejecutivos (siempre)
+            "D-058",
+            "D-059",
+            "D-060",  # Informes ejecutivos (siempre)
         }
 
     def test_capitulo_iii_genera_el_catalogo_completo(self):

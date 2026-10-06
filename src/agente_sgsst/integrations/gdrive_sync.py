@@ -3,6 +3,7 @@ Sincronizador avanzado con Google Drive (OAuth 2.0).
 Replica la estructura jerárquica PHVA (Planear, Hacer, Verificar, Actuar)
 y evita re-subir archivos ya existentes.
 """
+
 import os
 import pickle
 import json
@@ -11,7 +12,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 _CACHE_PATH = ".gdrive_cache.json"
 
 
@@ -20,6 +21,7 @@ class GoogleDriveSync:
     Sincronizador de la estructura SG-SST con Google Drive usando OAuth 2.0.
     Replicación jerárquica y caché de archivos subidos.
     """
+
     def __init__(self, credentials_path="credentials.json", token_path="token.pickle"):
         self.credentials_path = credentials_path
         self.token_path = token_path
@@ -29,9 +31,9 @@ class GoogleDriveSync:
     def _autenticar(self):
         creds = None
         if os.path.exists(self.token_path):
-            with open(self.token_path, 'rb') as token:
+            with open(self.token_path, "rb") as token:
                 creds = pickle.load(token)
-        
+
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try:
@@ -41,8 +43,7 @@ class GoogleDriveSync:
             if not creds:
                 if os.path.exists(self.credentials_path):
                     try:
-                        flow = InstalledAppFlow.from_client_secrets_file(
-                            self.credentials_path, SCOPES)
+                        flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, SCOPES)
                         creds = flow.run_local_server(port=0)
                     except Exception as e:
                         print(f"Error en flujo OAuth local: {e}")
@@ -50,12 +51,12 @@ class GoogleDriveSync:
                 else:
                     print("Aviso: No se encontró 'credentials.json'. Google Drive operará en modo simulado.")
                     return None
-            
-            with open(self.token_path, 'wb') as token:
+
+            with open(self.token_path, "wb") as token:
                 pickle.dump(creds, token)
-        
+
         try:
-            return build('drive', 'v3', credentials=creds)
+            return build("drive", "v3", credentials=creds)
         except Exception as e:
             print(f"Error al conectar con Google Drive API: {str(e)}")
             return None
@@ -87,21 +88,18 @@ class GoogleDriveSync:
         else:
             query += " and 'root' in parents"
 
-        results = self.service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-        files = results.get('files', [])
+        results = self.service.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
+        files = results.get("files", [])
         if files:
-            return files[0]['id']
+            return files[0]["id"]
 
         # Si no existe, crearla
-        file_metadata = {
-            'name': nombre,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }
+        file_metadata = {"name": nombre, "mimeType": "application/vnd.google-apps.folder"}
         if parent_id:
-            file_metadata['parents'] = [parent_id]
+            file_metadata["parents"] = [parent_id]
 
-        file = self.service.files().create(body=file_metadata, fields='id').execute()
-        return file.get('id')
+        file = self.service.files().create(body=file_metadata, fields="id").execute()
+        return file.get("id")
 
     def subir_archivo(self, ruta_local, parent_id=None):
         if not self.service:
@@ -121,31 +119,24 @@ class GoogleDriveSync:
         query = f"name='{nombre_archivo}' and trashed=false"
         if parent_id:
             query += f" and '{parent_id}' in parents"
-        results = self.service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-        files = results.get('files', [])
+        results = self.service.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
+        files = results.get("files", [])
 
         media = MediaFileUpload(ruta_local, resumable=True)
         if files:
-            file_id = files[0]['id']
+            file_id = files[0]["id"]
             # Actualizar archivo existente
-            file = self.service.files().update(
-                fileId=file_id,
-                media_body=media
-            ).execute()
+            file = self.service.files().update(fileId=file_id, media_body=media).execute()
             print(f"Actualizado en Google Drive: {nombre_archivo} (ID: {file.get('id')})")
         else:
             # Crear archivo nuevo
-            file_metadata = {'name': nombre_archivo}
+            file_metadata = {"name": nombre_archivo}
             if parent_id:
-                file_metadata['parents'] = [parent_id]
-            file = self.service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id'
-            ).execute()
+                file_metadata["parents"] = [parent_id]
+            file = self.service.files().create(body=file_metadata, media_body=media, fields="id").execute()
             print(f"Subido a Google Drive: {nombre_archivo} (ID: {file.get('id')})")
 
-        file_id = file.get('id')
+        file_id = file.get("id")
         self.cache[cache_key] = {"file_id": file_id, "mtime": mtime_local}
         self._guardar_cache()
         return file_id
