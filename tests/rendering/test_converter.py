@@ -10,7 +10,12 @@ Word real con python-docx.
 from __future__ import annotations
 
 
-from agente_sgsst.rendering.converter import _convertir_con_python_docx, _parsear_tabla, _ruta_imagen_markdown
+from agente_sgsst.rendering.converter import (
+    _convertir_con_python_docx,
+    _parsear_tabla,
+    _ruta_imagen_markdown,
+    convertir_markdown_a_docx,
+)
 
 PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
@@ -176,3 +181,27 @@ class TestImagenLogo:
         document = docx.Document(str(out))
         tabla = document.tables[0]
         assert "no encontrado" in tabla.rows[1].cells[0].text
+
+
+class TestConvertirPublico:
+    """API pública `convertir_markdown_a_docx`: determinista y sin Pandoc."""
+
+    def test_convierte_directo_a_docx(self, tmp_path):
+        md = tmp_path / "doc.md"
+        md.write_text(
+            "# Encabezado\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
+            encoding="utf-8",
+        )
+        out = tmp_path / "doc.docx"
+
+        assert convertir_markdown_a_docx(str(md), str(out)) is True
+        assert out.exists()
+
+        import docx
+
+        document = docx.Document(str(out))
+        assert document.paragraphs[0].text == "Encabezado"
+        assert len(document.tables) == 1
+
+    def test_archivo_inexistente_devuelve_false(self, tmp_path):
+        assert convertir_markdown_a_docx(str(tmp_path / "nada.md"), str(tmp_path / "nada.docx")) is False

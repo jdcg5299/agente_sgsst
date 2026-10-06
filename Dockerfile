@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema operativo (incluyendo pandoc para conversión avanzada de documentos)
-RUN apt-get update && apt-get install -y \
-    pandoc \
+# Dependencias de sistema mínimas (la conversión .docx es nativa con python-docx;
+# ya no se requiere pandoc)
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Establecer directorio de trabajo

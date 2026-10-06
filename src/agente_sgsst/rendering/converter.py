@@ -1,20 +1,21 @@
 """
-Conversión Markdown -> Word (.docx).
+Conversión Markdown -> Word (.docx) nativa con python-docx.
 
-Corrige los hallazgos 5.6 y 5.7 de CONSTITUTION.md (Sección 5):
+Modernizado para ser determinista (recomendación de CONSTITUTION.md §7): la
+conversión no depende de Pandoc, de modo que la salida .docx es idéntica en
+cualquier entorno. Contexto histórico de los hallazgos de la Sección 5:
+
 - 5.6: el fallback sin Pandoc convertía filas de tabla Markdown (`|...|`) en
   párrafos de texto plano, rompiendo el encabezado FT-SST-002 (una tabla).
-  Ahora detecta y construye tablas Word reales con python-docx.
-- 5.7: dejó de usarse por defecto el documento real con PII
-  ("FT-SST-002 - Responsable del Sistema...docx") como reference_doc de Pandoc.
-  El parámetro `reference_doc` es opcional y por defecto NO apunta a ningún
-  documento con datos personales.
+  Hoy se construyen tablas Word reales con python-docx.
+- 5.7: la rama Pandoc usaba como `reference_doc` el acta real con PII
+  ("FT-SST-002 - Responsable del Sistema...docx"). Al eliminar la dependencia
+  de Pandoc desapareció también el `reference_doc` y con él el riesgo de PII.
 """
 
 import html
 import os
 import re
-import subprocess
 
 from docx.shared import Cm
 
@@ -30,43 +31,17 @@ _RE_COLSPAN = re.compile(r"colspan\s*=\s*['\"]?(\d+)", re.IGNORECASE)
 
 ANCHO_IMAGEN_LOGO_CM = 2.8
 
-# El acta real con PII ya NO es el reference_doc por defecto (hallazgo 5.7).
-# Un reference_doc solo aporta estilos y NO debe arrastrar datos de una persona.
-REFERENCE_DOC_DEFAULT = None
 
-
-def convertir_markdown_a_docx(md_path, docx_path, reference_doc=None):
+def convertir_markdown_a_docx(md_path, docx_path):
     """
-    Convierte un archivo Markdown a Word (.docx) utilizando Pandoc y la plantilla
-    de referencia optional para heredar estilos corporativos. Si Pandoc no está
-    instalado, utiliza un conversor nativo basado en python-docx (hallazgo 5.6).
+    Convierte un archivo Markdown a Word (.docx) usando el conversor nativo
+    python-docx. No depende de Pandoc ni de ningún reference_doc: la salida es
+    determinista en cualquier entorno.
     """
     if not os.path.exists(md_path):
         print(f"Error: Archivo Markdown no encontrado: {md_path}")
         return False
 
-    if reference_doc is not None and "Responsable del Sistema de Gestión" in os.path.basename(reference_doc):
-        print(
-            "AVISO (hallazgo 5.7): se está usando como reference_doc el acta con PII de una "
-            "persona real. No debería usarse como plantilla técnica; se continúa sin ella."
-        )
-        reference_doc = None
-
-    # Intentar usar Pandoc si está disponible en el sistema
-    try:
-        cmd = ["pandoc", md_path, "-o", docx_path]
-        if reference_doc and os.path.exists(reference_doc):
-            cmd.extend(["--reference-doc", reference_doc])
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"Convertido con éxito vía Pandoc: {docx_path}")
-            return True
-        print(f"Pandoc advertencia/fallo, usando fallback python-docx: {result.stderr}")
-    except FileNotFoundError:
-        print("Pandoc no detectado en el sistema, utilizando conversor nativo python-docx...")
-
-    # Fallback nativo con python-docx
     return _convertir_con_python_docx(md_path, docx_path)
 
 
@@ -179,9 +154,8 @@ def _agregar_tabla_html(doc, lineas: list[str]) -> None:
 
 def _insertar_imagen_en_celda(celda, ruta_imagen: str):
     """Incrusta la imagen del logo en la celda de la cabecera FT-SST-002."""
-    import os as _os
 
-    if not _os.path.exists(ruta_imagen):
+    if not os.path.exists(ruta_imagen):
         celda.text = f"[Logo no encontrado: {ruta_imagen}]"
         return
     parrafo = celda.paragraphs[0]
@@ -194,9 +168,9 @@ def _insertar_imagen_en_celda(celda, ruta_imagen: str):
 
 def _convertir_con_python_docx(md_path, docx_path):
     """
-    Conversor nativo sin Pandoc usando python-docx.
+    Conversor nativo con python-docx (único camino de conversión).
 
-    Corrige el hallazgo 5.6: las líneas de tabla Markdown (`|...|`) ya NO se
+    Resultado del hallazgo 5.6: las líneas de tabla Markdown (`|...|`) ya NO se
     agregan como párrafos de texto plano; se construyen tablas Word reales
     (`doc.add_table`) con la primera fila en negrita.
     """
