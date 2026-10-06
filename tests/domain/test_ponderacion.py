@@ -6,6 +6,7 @@ El motor es el cálculo real del FT-SST-001: sumatoria por cumplimiento + ítems
 pasar silencioso: entradas incompletas, numerales desconocidos o "No aplica" sin
 justificación lanzan excepción (Principio XI).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -65,6 +66,58 @@ class TestIntegridadTabla:
         assert abs(total - 1.0) < 1e-9
 
 
+class TestTextoOficialDelInstrumento:
+    """El JSON maestro se reconstruyó desde el instrumento oficial de docs/ (.xls).
+
+    Cada ítem debe traer el texto íntegro de sus tres columnas normativas
+    (Ítem, Criterio, Modo de verificación) para que el diagnóstico entregado en
+    Excel sea el instrumento auditable y no un resumen.
+    """
+
+    def test_todos_los_items_traen_criterio_y_modo_de_verificacion(self):
+        items = cargar_estandares_capitulo_iii()
+        sin_texto = [
+            item.numeral
+            for item in items.values()
+            if not item.criterio.strip() or not item.modo_verificacion.strip()
+        ]
+        assert sin_texto == []
+
+    def test_todos_los_items_traen_descripcion_y_nombre_de_grupo(self):
+        items = cargar_estandares_capitulo_iii()
+        sin_texto = [
+            item.numeral
+            for item in items.values()
+            if not item.descripcion.strip() or not item.nombre_grupo.strip()
+        ]
+        assert sin_texto == []
+
+    def test_las_descripciones_son_el_texto_del_instrumento(self):
+        items = cargar_estandares_capitulo_iii()
+        assert "diseñe e implemente" in items["1.1.1"].descripcion
+        assert "seguridad social integral" in items["1.1.4"].descripcion
+
+    def test_los_pesos_3_2_1_y_3_2_3_siguen_al_instrumento(self):
+        items = cargar_estandares_capitulo_iii()
+        assert items["3.2.1"].valor_item == pytest.approx(0.01)
+        assert items["3.2.3"].valor_item == pytest.approx(0.02)
+
+    def test_la_suma_por_grupo_coincide_con_su_valor_declarado(self):
+        items = cargar_estandares_capitulo_iii()
+        suma_por_grupo: dict[str, float] = {}
+        declarado: dict[str, float] = {}
+        for item in items.values():
+            suma_por_grupo[item.numeral_grupo] = suma_por_grupo.get(item.numeral_grupo, 0.0) + item.valor_item
+            declarado[item.numeral_grupo] = item.valor_numeral_grupo
+        for grupo, suma in suma_por_grupo.items():
+            assert suma == pytest.approx(declarado[grupo]), grupo
+
+    def test_un_estandar_tiene_7_grupos_o_mas_y_el_6_1_es_del_verificar(self):
+        items = cargar_estandares_capitulo_iii()
+        assert items["6.1.1"].ciclo == "VERIFICAR"
+        assert items["7.1.1"].ciclo == "ACTUAR"
+
+
 class TestCalculoBasico:
     def test_todo_cumplimiento_da_100_porciento(self):
         resultado = calcular_diagnostico_capitulo_iii(_respuestas_de_relleno())
@@ -105,7 +158,9 @@ class TestCalculoBasico:
         assert resultado.porcentaje == pytest.approx(0.11)
 
     def test_item_no_aplica_registrado_con_puntaje_completo(self):
-        resultado = calcular_diagnostico_capitulo_iii(_respuestas_de_relleno(con={"5.1.2": ("NA", "Justificación")}))
+        resultado = calcular_diagnostico_capitulo_iii(
+            _respuestas_de_relleno(con={"5.1.2": ("NA", "Justificación")})
+        )
         item = next(i for i in resultado.items if i.numeral == "5.1.2")
         assert item.criterio is CriterioCalificacion.NO_APLICA
         assert item.puntos_obtenidos == pytest.approx(item.valor_item)

@@ -9,6 +9,7 @@ Mantiene las mismas firmas públicas que el `clasificacion.py` original
 Este módulo es determinista: no importa nada de `generation/` ni `rendering/`
 (Principio III de CONSTITUTION.md).
 """
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,7 @@ _ARCHIVO_CAPITULO_III = _DATA_DIR / "estandares_0312_capitulo_iii.json"
 class RiesgoARL(str, Enum):
     """Clase de riesgo ARL, en la notación oficial (numerales romanos)."""
 
-    I = "I"
+    I = "I"  # noqa: E741
     II = "II"
     III = "III"
     IV = "IV"
@@ -99,6 +100,33 @@ def clasificar_empresa(total_trabajadores: int, clase_riesgo_arl) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Nivel de cumplimiento según el Art. 27 de la Resolución 0312/2019.
+# ---------------------------------------------------------------------------
+# Es una regla normativa del diagnóstico, no de maquetación: por eso vive en el
+# dominio y no en un renderizador. Los tres cortes son los del Art. 27.
+NIVEL_CRITICO = "CRÍTICO"
+NIVEL_MODERADO = "MODERADO"
+NIVEL_ACEPTABLE = "ACEPTABLE"
+
+_CORTE_CRITICO = 0.60
+_CORTE_MODERADO = 0.85
+
+
+def clasificar_nivel(porcentaje: float) -> str:
+    """Nivel de cumplimiento del Art. 27: <60% crítico, 60-85% moderado, >85% aceptable.
+
+    `porcentaje` es una fracción (0.85 = 85%). Los cortes son del artículo: por
+    debajo de 60% es crítico, hasta 85% inclusive es moderado, y por encima
+    aceptable.
+    """
+    if porcentaje < _CORTE_CRITICO:
+        return NIVEL_CRITICO
+    if porcentaje <= _CORTE_MODERADO:
+        return NIVEL_MODERADO
+    return NIVEL_ACEPTABLE
+
+
+# ---------------------------------------------------------------------------
 # Ítems aplicables por capítulo — válidos contra el ANEXO 1 oficial.
 # ---------------------------------------------------------------------------
 # Corrección de los hallazgos 5.1 y 5.2 de CONSTITUTION.md (resueltos con la
@@ -115,7 +143,13 @@ _CAPITULO_I_ITEMS: frozenset[str] = frozenset(
         # Art. 3, Res. 0312/2019 (empresas de 10 o menos trabajadores, riesgo I-II-III):
         # persona que diseñe el SG-SST, afiliación SS, capacitación, plan anual,
         # evaluaciones médicas ocupacionales, identificación de peligros y medidas de control.
-        "1.1.1", "1.1.4", "1.2.1", "2.4.1", "3.1.4", "4.1.1", "4.2.1"
+        "1.1.1",
+        "1.1.4",
+        "1.2.1",
+        "2.4.1",
+        "3.1.4",
+        "4.1.1",
+        "4.2.1",
     }
 )
 
@@ -202,6 +236,5 @@ def get_applicable_items(capitulo: str) -> frozenset[str]:
         return _cargar_numerales_capitulo_iii()
 
     raise ValueError(
-        f"Capítulo desconocido: {capitulo!r}. Debe ser 'Capítulo I', 'Capítulo II' "
-        "o 'Capítulo III'."
+        f"Capítulo desconocido: {capitulo!r}. Debe ser 'Capítulo I', 'Capítulo II' o 'Capítulo III'."
     )
