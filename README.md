@@ -2,7 +2,7 @@
 
 Asistente inteligente para la construcción del **Sistema de Gestión de Seguridad y Salud en el Trabajo (SG-SST)** en Colombia.
 
-Clasifica el capítulo aplicable de la Resolución 0312 de 2019, calcula el diagnóstico inicial ponderado (FT-SST-001), genera el set documental con asistencia de un LLM, lo exporta en Markdown y Word (.docx) bajo el estándar visual FT-SST-002, lo organiza en la estructura de carpetas PHVA y, opcionalmente, lo sincroniza con Google Drive.
+Clasifica el capítulo aplicable de la Resolución 0312 de 2019, calcula el diagnóstico inicial ponderado (FT-SST-001) y lo entrega en Excel (.xlsx) replicando el instrumento oficial de la norma, genera el set documental con asistencia de un LLM, lo exporta en Markdown y Word (.docx) bajo el estándar visual FT-SST-002, lo organiza en la estructura de carpetas PHVA y, opcionalmente, lo sincroniza con Google Drive.
 
 > **Normativa aplicada:** Decreto 1072 de 2015 · Resolución 0312 de 2019
 > **Fuente única de verdad:** [`docs/CONSTITUTION.md`](docs/CONSTITUTION.md) — principios, reglas de dominio, arquitectura y auditoría del código.
@@ -35,6 +35,7 @@ Clasifica el capítulo aplicable de la Resolución 0312 de 2019, calcula el diag
   - Los 60 ítems de Capítulo III suman 100%.
   - Regla "No aplica": otorga el puntaje completo del ítem, siempre con justificación.
   - Sin valores por defecto silenciosos: entradas incompletas o inválidas lanzan excepción (Principio XI).
+- **Diagnóstico oficial en Excel**: el `.xlsx` replica el instrumento `docs/Diagnostico Resolucion 0312 de 2019 - 2026.xls` — 11 columnas (Ciclo, Numeral, Ítem, Criterio, Modo de verificación, Valor del ítem, Peso porcentual, Puntaje Posible ×3, Calificación), jerarquía estándar → bloque → ítems y cierre con "PORCENTAJE TOTAL DEL ESTANDAR" por bloque, "SUMA TOTAL", "SUMA TOTAL DE LOS ESTANDRES MINIMOS" y nivel del Art. 27. `tests/domain/test_fidelidad_instrumento.py` lo contrasta celda a celda contra el `.xls`, así que el texto y los pesos no pueden divergir del instrumento firmado. El `.md` queda solo como vista previa web; el diagnóstico **no** se entrega en `.docx`.
 - **Generación híbrida de documentos**: plantillas + LLM, con el prompt resuelto únicamente desde `docs/master_prompts.md` (sin prompts embebidos en el código).
 - **Exportación dual**: Markdown (.md) y Word (.docx), con encabezado estandarizado FT-SST-002.
 - **Word fiel al formato oficial**: los `.docx` se generan a partir de la plantilla `docs/plantilla_ft_sst_002.docx` (header de sección fusionado, pie `Elaboró/Revisó/Aprobó`, Times New Roman 12pt, Letter, márgenes 3 cm) con el logo, la razón social, fecha y datos de la empresa insertados dinámicamente por documento.
@@ -73,7 +74,7 @@ Agente_SGSST/
 ├── app.py                             # Front-end web (Streamlit)
 ├── sistema_gestion/                   # Salida generada (NO versionada)
 ├── src/
-│   ├── agente_sgsst/
+│   └── agente_sgsst/
 │   │   ├── __init__.py
 │   │   ├── main.py                    # Punto de entrada (orquestación del flujo)
 │   │   ├── generador.py               # Orquestador de catálogo y generación LLM
@@ -88,25 +89,27 @@ Agente_SGSST/
 │   │   │   ├── maquetador.py          #   Encabezado FT-SST-002 (Markdown)
 │   │   │   ├── docx_plantilla.py      #   Render .docx fiel a plantilla FT-SST-002
 │   │   │   ├── converter.py           #   Markdown -> .docx (Pandoc o python-docx)
-│   │   │   └── diagnostico.py         #   Informe FT-SST-001 (Markdown + HTML)
+│   │   │   ├── excel_diagnostico.py   #   Diagnóstico FT-SST-001 .xlsx (instrumento oficial)
+│   │   │   └── diagnostico.py         #   Informe FT-SST-001 (.xlsx oficial + .md vista previa)
 │   │   ├── integrations/
 │   │   │   └── gdrive_sync.py         #   Sincronización con Google Drive (PHVA)
 │   │   └── cli/
 │   │       ├── main.py                #   Menú interactivo
 │   │       ├── ingesta.py             #   Captura de datos de la empresa
 │   │       └── rut.py                 #   Parser RUT/Cámara de Comercio (pypdf)
-│   ├── converter.py                   # Shims de compatibilidad que re-exportan
-│   ├── diagnostico.py                 #   desde agente_sgsst.* (imports legacy
-│   ├── llm_client.py                  #   como `from converter import ...`)
-│   └── ...
-└── tests/                             # pytest (72 tests)
+└── tests/                             # pytest (161 tests)
     ├── domain/
-    │   ├── test_clasificacion.py      # TDD del bug 5.1 (21 tests)
-    │   └── test_ponderacion.py        # Motor de ponderación (17 tests)
+    │   ├── test_clasificacion.py      # TDD del bug 5.1 (22 tests)
+    │   ├── test_ponderacion.py        # Motor de ponderación (30 tests)
+    │   └── test_fidelidad_instrumento.py  # Fidelidad al .xls oficial (16 tests)
     ├── generation/
-    │   └── test_prompt_registry.py    # Registro de prompts (7 tests)
+    │   ├── test_prompt_registry.py    # Registro de prompts (7 tests)
+    │   └── test_llm_client.py         # Reintentos y errores del cliente LLM (4 tests)
     ├── rendering/
-    │   ├── test_converter.py          # Fallback python-docx + logo (7 tests)
+    │   ├── test_diagnostico.py        # Entrega .xlsx + paridad con el .md (18 tests)
+    │   ├── test_excel_diagnostico.py  # Instrumento oficial en .xlsx (32 tests)
+    │   ├── test_converter.py          # Fallback python-docx + logo (9 tests)
+    │   ├── test_docx_plantilla.py     # Render .docx fiel a plantilla (3 tests)
     │   └── test_maquetador.py         # Encabezado FT-SST-002 + logo (4 tests)
     ├── cli/
     │   └── test_rut.py                # Parser RUT/Cámara de Comercio (9 tests)
@@ -211,7 +214,7 @@ sistema_gestion/
 │   └── 3.1_Verificacion/
 ├── 04_ACTUAR/
 │   └── 4.1_Mejoramiento/
-└── 99_INFORMES_EJECUTIVOS/         # Diagnóstico FT-SST-001, informes
+└── 99_INFORMES_EJECUTIVOS/         # Diagnóstico FT-SST-001 (.xlsx oficial + .md vista previa), informes
 ```
 
 ## Catálogo de documentos
@@ -232,10 +235,28 @@ El catálogo maestro vive en `src/agente_sgsst/generador.py` (`cargar_catalogo()
 | D-036 | Matriz IPARV (GTC 45) | 4.1.1 | 2.3_Peligros_Riesgos |
 | D-044 | Plan de Emergencias | 4.2.5 | 2.4_Operacion_Seguridad |
 
+## Comandos rápidos con Make
+
+Todas las ejecuciones comunes están en el [`Makefile`](Makefile) (GNU Make; en Windows: `choco install make`). El shell se resuelve solo: cmd en Windows, sh en Linux/CI.
+
+| Comando | Acción |
+|---|---|
+| `make install` | Instala dependencias (`uv sync`) |
+| `make test` | Ejecuta la suite de pytest |
+| `make web` | Lanza la interfaz web Streamlit → http://localhost:8501 |
+| `make cli` | Lanza el menú CLI interactivo |
+| `make demo` | Regenera el diagnóstico DEMO de validación (no toca datos reales) |
+| `make lint` | Verifica estilo con ruff (`ruff check .`) |
+| `make lint-format` | Verifica formato con ruff (`ruff format --check .`) |
+| `make docker-build` / `make docker-up` | Construye / levanta el contenedor |
+| `make build` | Empaqueta con `uv build` |
+| `make clean` | Elimina caches y artefactos de build (Windows) |
+
 ## Pruebas
 
 ```bash
-uv run pytest
+uv run pytest        # o: make test
+uv run ruff check .  # o: make lint
 ```
 
 La suite cubre:
