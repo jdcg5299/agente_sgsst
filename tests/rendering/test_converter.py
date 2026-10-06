@@ -6,9 +6,9 @@ de texto plano (`doc.add_paragraph(line_str)`), rompiendo el encabezado FT-SST-0
 en entornos sin Pandoc. Estos tests verifican que ahora se construye una tabla
 Word real con python-docx.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
 
 from agente_sgsst.rendering.converter import _convertir_con_python_docx, _parsear_tabla, _ruta_imagen_markdown
 
@@ -58,8 +58,8 @@ class TestConversionDocx:
         # 2 filas de datos (la separadora se descarta)
         assert len(tabla.rows) == 2
         assert len(tabla.columns) == 3
-        assert tabla.rows[0].cells[0].text == "Logo"          # encabezado
-        assert tabla.rows[1].cells[2].text == "FT-SST-001"     # dato
+        assert tabla.rows[0].cells[0].text == "Logo"  # encabezado
+        assert tabla.rows[1].cells[2].text == "FT-SST-001"  # dato
 
     def test_encabezado_markdown_se_mantiene_como_heading(self, tmp_path):
         md = tmp_path / "doc.md"
@@ -72,6 +72,61 @@ class TestConversionDocx:
 
         document = docx.Document(str(out))
         assert document.paragraphs[0].text == "Diagnóstico Inicial"
+
+
+class TestTablaHtmlInformeDiagnostico:
+    """Tablas HTML (matriz del diagnóstico Res. 0312) -> tablas Word reales."""
+
+    def _convierte(self, md, tmp_path):
+        md_path = tmp_path / "doc.md"
+        md_path.write_text(md, encoding="utf-8")
+        out = tmp_path / "doc.docx"
+        assert _convertir_con_python_docx(str(md_path), str(out)) is True
+        return out
+
+    def test_tabla_html_con_colspan_y_amarillo(self, tmp_path):
+        md = (
+            "<table>\n"
+            "  <tr><th>Ciclo</th><th>Numeral</th><th>Desc</th><th>Valor</th>"
+            "<th>C</th><th>NC</th><th>NA</th></tr>\n"
+            "  <tr><td>PLANEAR</td><td>1.1.1</td><td>Resp del SG-SST</td>"
+            "<td>0.50%</td><td>X</td><td></td><td></td></tr>\n"
+            '  <tr><td colspan="7">PORCENTAJE TOTAL DEL ESTÁNDAR</td></tr>\n'
+            '  <tr style="background-color: yellow;"><td></td><td>1.1.2</td>'
+            "<td>NA manual</td><td>0.50%</td><td></td><td></td><td>X</td></tr>\n"
+            "</table>\n"
+        )
+        out = self._convierte(md, tmp_path)
+
+        import docx
+        from docx.enum.text import WD_COLOR_INDEX
+
+        document = docx.Document(str(out))
+        assert len(document.tables) == 1
+        tabla = document.tables[0]
+        assert len(tabla.rows) == 4
+        assert tabla.rows[0].cells[0].text == "Ciclo"
+        # colspan: la fila del subtotal queda con su texto en la primera celda
+        assert tabla.rows[2].cells[0].text == "PORCENTAJE TOTAL DEL ESTÁNDAR"
+        # fila amarilla: el run queda resaltado en amarillo
+        run = tabla.rows[3].cells[1].paragraphs[0].runs[0]
+        assert run.font.highlight_color == WD_COLOR_INDEX.YELLOW
+
+    def test_tabla_html_se_para_en_encabezados_markdown(self, tmp_path):
+        md = (
+            "# Diagnóstico\n\n"
+            "<table>\n<tr><td>a</td><td>b</td></tr>\n</table>\n\n"
+            "## Resultado\n\nPárrafo final.\n"
+        )
+        out = self._convierte(md, tmp_path)
+
+        import docx
+
+        document = docx.Document(str(out))
+        assert len(document.tables) == 1
+        assert document.paragraphs[0].text == "Diagnóstico"
+        assert any(p.text == "Resultado" for p in document.paragraphs)
+        assert any("Párrafo final" in p.text for p in document.paragraphs)
 
 
 class TestImagenLogo:

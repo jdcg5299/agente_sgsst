@@ -17,70 +17,237 @@ Ahora:
 - No se inventan resultados: sin respuestas completas, el informe queda
   explícitamente "pendiente de evaluación" (Principio XI).
 """
+
 import os
 from datetime import datetime
+from html import escape
 
 from agente_sgsst.domain.clasificacion import clasificar_empresa, get_applicable_items
-from agente_sgsst.domain.ponderacion import calcular_diagnostico, cargar_estandares_capitulo_iii
+from agente_sgsst.domain.ponderacion import (
+    Totales,
+    calcular_diagnostico,
+    evaluacion_por_estandar,
+    total_minimos_estandares,
+)
+from agente_sgsst.rendering.excel_diagnostico import generar_excel_diagnostico
 from agente_sgsst.rendering.maquetador import get_header_ft_sst_002
+
+# Las 11 columnas del instrumento oficial. "Puntaje Posible" abarca tres sub-columnas.
+_NCOLUMNAS = 11
+_ESTILO_AMARILLO = ' style="background-color: yellow;"'
+_ENCABEZADOS = (
+    "Ciclo",
+    "Numeral",
+    "Item",
+    "Criterio",
+    "Modo de verificación",
+    "Valor del item del estandar",
+    "Peso porcentual",
+    "Cumple totalmente",
+    "No cumple",
+    "No aplica",
+    "Calificacion de la empresa o contratante",
+)
+
+
+def _pct(value: float | None) -> str:
+    """Formatea un porcentaje del diagnóstico.
+
+    Sin resultado todavía (empresa nueva, sin respuestas guardadas) los valores
+    dependientes de la evaluación son `None`: se representan vacíos en vez de
+    romper la generación (Principio XI). Los pesos normativos del instrumento
+    sí se muestran siempre: pertenecen al formato oficial, no al avance de la
+    evaluación, y el .xlsx los escribe igual en estado pendiente.
+    """
+    if value is None:
+        return ""
+    return f"{value * 100:.2f}%"
+
+
+def _celda(texto, *, estilo: str = "") -> str:
+    """Celda de la tabla, con el contenido escapado.
+
+    Los textos de la tabla vienen del JSON del instrumento y de lo que responde el
+    evaluador; se escapan para que un `<script>` no termine ejecutándose al abrir
+    la vista previa. Los valores ya formateados (porcentajes) no contienen
+    caracteres problemáticos, pero se escapan igual por uniformidad.
+    """
+    return f"<td{estilo}>{escape(str(texto))}</td>"
+
+
+def _fila_encabezado_completa(texto: str) -> str:
+    return f'<tr><td colspan="{_NCOLUMNAS}" style="text-align: left;"><strong>{texto}</strong></td></tr>'
+
+
+def _fila_totales(etiqueta: str, *, valor, cumples, nocumples, noaplicas, calificacion) -> str:
+    """Fila de totales: la etiqueta ocupa Ítem..Modo y los valores caen en sus columnas."""
+    return (
+        f"<tr>{_celda('')}{_celda('')}"
+        f'<td colspan="3" style="text-align: left;"><em>{etiqueta}</em></td>'
+        f"{_celda(valor)}{_celda('')}"
+        f"{_celda(cumples)}{_celda(nocumples)}{_celda(noaplicas)}{_celda(calificacion)}</tr>"
+    )
+
+
+def _valores_de_totales(totales: Totales, hay_resultado: bool) -> dict[str, str]:
+    """Traduce un `Totales` del dominio a las celdas de las cuatro columnas."""
+    if not hay_resultado:
+        return {"cumples": "", "nocumples": "", "noaplicas": "", "calificacion": ""}
+    return {
+        "cumples": _pct(totales.cumples),
+        "nocumples": _pct(totales.no_cumples),
+        "noaplicas": _pct(totales.no_aplica),
+        "calificacion": _pct(totales.calificacion),
+    }
 
 
 def _filas_tabla(capitulo, respuestas):
-    """Construye las 60 filas de la Tabla de Valores y, si hay respuestas, el puntaje.
+    """Construye las filas de la Tabla de Valores con las 11 columnas del instrumento.
 
-    Solo los numerales APLICABLES del capítulo requieren respuesta manual; los no
-    aplicables (empresas <50 trabajadores, riesgo I/II/III) se otorgan automáticamente
-    como "No Aplica" con puntaje completo y NO se resaltan en amarillo (no son una
-    omisión del evaluador, sino la regla del Art. 27 parágrafo 2).
+    Estructura espejo del Excel oficial: encabezado de estándar por fase PHVA,
+    encabezado de bloque solo para los grupos que el instrumento desglosa
+    (1.1, 3.2, 4.1…), los 60 ítems, y el cierre de cada bloque con
+    "PORCENTAJE TOTAL DEL ESTANDAR". El recorrido y los totales salen de
+    `evaluacion_por_estandar`, igual que el .xlsx, para que ambos no divergan.
+
+    Retorna (filas, resultado) donde resultado es None cuando aún no hay respuestas.
     """
-    items = cargar_estandares_capitulo_iii()
-    aplicables = get_applicable_items(capitulo)
     resultado = calcular_diagnostico(capitulo, respuestas) if respuestas else None
+    evaluado = {r.numeral: r for r in resultado.items} if resultado else {}
+    hay_resultado = resultado is not None
+
     filas = []
-    n = 1
-    for item in sorted(items.values(), key=lambda it: (it.estandar_num, it.numeral)):
-        celda_c = celda_nc = celda_na = ""
-        estilo = ""
-        if resultado is not None:
-            resultado_item = next(r for r in resultado.items if r.numeral == item.numeral)
-            if resultado_item.criterio.value == "C":
-                celda_c = "X"
-            elif resultado_item.criterio.value == "NC":
-                celda_nc = "X"
-            else:
-                celda_na = "X"
-                # Amarillo solo para "No Aplica" manual (hallazgo a verificar por el
-                # evaluador), NO para el "No Aplica" automático de la norma.
-                if not resultado_item.automatico:
-                    estilo = ' style="background-color: yellow;"'
+    for estandar in evaluacion_por_estandar(resultado):
         filas.append(
-            f'  <tr{estilo}><td>{n}</td><td>{item.numeral}</td>'
-            f'<td>{item.descripcion}</td><td>{item.valor_item * 100:.2f}%</td>'
-            f'<td>{celda_c}</td><td>{celda_nc}</td><td>{celda_na}</td></tr>'
+            _fila_encabezado_completa(
+                f"{estandar.ciclo} — {estandar.estandar_nombre_oficial} ({estandar.valor * 100:.0f}%)"
+            )
         )
-        n += 1
+        for resumen in estandar.bloques:
+            bloque = resumen.bloque
+            if bloque.desglosado:
+                filas.append(
+                    _fila_encabezado_completa(f"{bloque.clave} {bloque.nombre} ({bloque.valor * 100:.0f}%)")
+                )
+            for indice, item in enumerate(bloque.items):
+                primero = indice == 0
+                r_item = evaluado.get(item.numeral)
+                celdas = {"cumples": "", "nocumples": "", "noaplicas": "", "calificacion": ""}
+                estilo = ""
+                if r_item is not None:
+                    totales_item = Totales.de_item(r_item)
+                    celdas = _valores_de_totales(totales_item, hay_resultado=True)
+                    # Amarillo solo para el "No Aplica" manual (requiere
+                    # justificación del evaluador), NO para el automático de la norma.
+                    if totales_item.no_aplica and not r_item.automatico:
+                        estilo = _ESTILO_AMARILLO
+                filas.append(
+                    f"  <tr{estilo}>"
+                    f"{_celda(estandar.ciclo if primero else '')}"
+                    f"{_celda(item.numeral)}"
+                    f"{_celda(item.descripcion)}"
+                    f"{_celda(item.criterio)}"
+                    f"{_celda(item.modo_verificacion)}"
+                    f"{_celda(_pct(item.valor_item))}"
+                    f"{_celda(_pct(bloque.valor) if primero else '')}"
+                    f"{_celda(celdas['cumples'])}{_celda(celdas['nocumples'])}"
+                    f"{_celda(celdas['noaplicas'])}{_celda(celdas['calificacion'])}"
+                    "</tr>"
+                )
+            if hay_resultado:
+                filas.append(
+                    _fila_totales(
+                        "PORCENTAJE TOTAL DEL ESTANDAR",
+                        valor=_pct(bloque.valor),
+                        **_valores_de_totales(resumen.totales, hay_resultado),
+                    )
+                )
+            else:
+                filas.append(
+                    _fila_totales(
+                        "PORCENTAJE TOTAL DEL ESTANDAR - pendiente de evaluación",
+                        valor=_pct(bloque.valor),
+                        **{
+                            "cumples": "",
+                            "nocumples": "",
+                            "noaplicas": "",
+                            "calificacion": "",
+                        },
+                    )
+                )
+
+        if hay_resultado:
+            filas.append(
+                _fila_totales(
+                    "SUMA TOTAL",
+                    valor=_pct(estandar.valor_acumulado),
+                    **_valores_de_totales(estandar.totales, hay_resultado),
+                )
+            )
+        else:
+            filas.append(
+                _fila_totales(
+                    "SUMA TOTAL - pendiente de evaluación",
+                    valor=_pct(estandar.valor_acumulado),
+                    **{"cumples": "", "nocumples": "", "noaplicas": "", "calificacion": ""},
+                )
+            )
+
+    # Cierre: los mismos rótulos y el mismo orden que el .xlsx oficial, para que la
+    # vista previa narre exactamente lo mismo que el archivo que se entrega.
+    if resultado is None:
+        for etiqueta in (
+            "SUMA TOTAL DE LOS ESTANDRES MINIMOS",
+            "SUMA TOTAL DE LOS AVANCES MÍNIMOS DEL SG-SST",
+        ):
+            filas.append(
+                _fila_totales(
+                    f"{etiqueta} - pendiente de evaluación",
+                    valor=_pct(total_minimos_estandares()),
+                    **{"cumples": "", "nocumples": "", "noaplicas": "", "calificacion": ""},
+                )
+            )
+    else:
+        totales = resultado.totales
+        filas.append(
+            _fila_totales(
+                "SUMA TOTAL DE LOS ESTANDRES MINIMOS",
+                valor=_pct(total_minimos_estandares()),
+                cumples=_pct(totales.cumples),
+                nocumples=_pct(totales.no_cumples),
+                noaplicas=_pct(totales.no_aplica),
+                calificacion="",
+            )
+        )
+        filas.append(
+            _fila_totales(
+                "SUMA TOTAL DE LOS AVANCES MÍNIMOS DEL SG-SST",
+                valor="",
+                **_valores_de_totales(totales, hay_resultado),
+            )
+        )
     return filas, resultado
 
 
 def generar_diagnostico_base(contexto):
-    empresa = contexto['empresa']
-    capitulo = clasificar_empresa(empresa['total_trabajadores'], empresa['clase_riesgo_arl'])
+    empresa = contexto["empresa"]
+    capitulo = clasificar_empresa(empresa["total_trabajadores"], empresa["clase_riesgo_arl"])
     aplicables = get_applicable_items(capitulo)
 
-    respuestas = (contexto.get('estado_sistema', {})
-                  .get('diagnostico', {})
-                  .get('respuestas') or None)
+    respuestas = contexto.get("estado_sistema", {}).get("diagnostico", {}).get("respuestas") or None
 
     filas, resultado = _filas_tabla(capitulo, respuestas)
 
     informe_path = "sistema_gestion/99_INFORMES_EJECUTIVOS/Diagnostico_Inicial_Resolucion_0312.md"
     header_table = get_header_ft_sst_002(
-        "DIAGNÓSTICO INICIAL SG-SST", "FT-SST-001", "E2.3.1",
-        empresa['razon_social'], fecha=datetime.now().strftime("%d/%m/%Y"),
+        "DIAGNÓSTICO INICIAL SG-SST",
+        "FT-SST-001",
+        "E2.3.1",
+        empresa["razon_social"],
+        fecha=datetime.now().strftime("%d/%m/%Y"),
     )
 
-    matriz_html = "<table>\n"
-    matriz_html += "  <tr><th>N°</th><th>Numeral</th><th>Descripción</th><th>Valor</th><th>C</th><th>NC</th><th>NA</th></tr>\n"
+    matriz_html = "<table>\n  <tr>" + "".join(f"<th>{h}</th>" for h in _ENCABEZADOS) + "</tr>\n"
     matriz_html += "\n".join(filas)
     matriz_html += "\n</table>"
 
@@ -94,9 +261,14 @@ def generar_diagnostico_base(contexto):
     if resultado is not None:
         n_manuales = resultado.aplicables
         n_auto_na = len(resultado.items) - n_manuales
+        totales = resultado.totales
         resumen = (
             f"### Resultado del diagnóstico ({capitulo})\n\n"
-            f"- Puntaje obtenido: **{resultado.porcentaje * 100:.2f}%**\n"
+            f"- Calificación de la empresa: **{totales.calificacion * 100:.2f}%** — Nivel "
+            f"**{resultado.nivel}** (Art. 27: <60% Crítico, 60–85% Moderado, >85% Aceptable).\n"
+            f"- Avance por cumplimiento: **{totales.cumples * 100:.2f}%** cumplido, "
+            f"**{totales.no_cumples * 100:.2f}%** pendiente, "
+            f"**{totales.no_aplica * 100:.2f}%** no aplica.\n"
         )
         if capitulo == "Capítulo III":
             resumen += f"- Ítems evaluados: {len(resultado.items)} / 60\n"
@@ -123,15 +295,17 @@ def generar_diagnostico_base(contexto):
             )
         nota_estado = "Pendiente de evaluación"
 
-    contexto.setdefault('estado_sistema', {})
-    contexto['estado_sistema']['capitulo_aplicable'] = capitulo
-    if 'diagnostico' not in contexto['estado_sistema']:
-        contexto['estado_sistema']['diagnostico'] = {}
-    contexto['estado_sistema']['diagnostico'].update({
-        'capitulo': capitulo,
-        'estado': nota_estado or "Calculado",
-        'porcentaje': resultado.porcentaje if resultado else None,
-    })
+    contexto.setdefault("estado_sistema", {})
+    contexto["estado_sistema"]["capitulo_aplicable"] = capitulo
+    if "diagnostico" not in contexto["estado_sistema"]:
+        contexto["estado_sistema"]["diagnostico"] = {}
+    contexto["estado_sistema"]["diagnostico"].update(
+        {
+            "capitulo": capitulo,
+            "estado": nota_estado or "Calculado",
+            "porcentaje": resultado.porcentaje if resultado else None,
+        }
+    )
 
     contenido = f"""# Diagnóstico Inicial SG-SST
 
@@ -145,7 +319,11 @@ def generar_diagnostico_base(contexto):
 """
 
     os.makedirs(os.path.dirname(informe_path), exist_ok=True)
-    with open(informe_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join([line.rstrip() for line in contenido.split('\n')]))
+    with open(informe_path, "w", encoding="utf-8") as f:
+        f.write("\n".join([line.rstrip() for line in contenido.split("\n")]))
+
+    # El formato oficial de entrega del diagnóstico 0312 es Excel (.xlsx),
+    # replicando el instrumento de docs/ (el .md solo se usa como vista previa web).
+    generar_excel_diagnostico(capitulo, resultado, empresa, informe_path.replace(".md", ".xlsx"))
 
     return contexto

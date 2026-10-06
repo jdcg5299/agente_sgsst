@@ -10,6 +10,8 @@ Corrige los hallazgos 5.6 y 5.7 de CONSTITUTION.md (Sección 5):
   El parámetro `reference_doc` es opcional y por defecto NO apunta a ningún
   documento con datos personales.
 """
+
+import html
 import os
 import re
 import subprocess
@@ -19,6 +21,12 @@ from docx.shared import Cm
 from agente_sgsst.rendering.maquetador import _IMAGEN_MARKDOWN
 
 _COLUMNA_SEPARADOR = re.compile(r"^:?-+:?$")
+
+# Tablas HTML (las usa el informe del diagnóstico FT-SST-001, que maqueta la
+# Tabla de Valores de la Res. 0312 como <table>: sin esto, se vertían a párrafos).
+_RE_FILA_HTML = re.compile(r"<tr([^>]*)>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
+_RE_CELDA_HTML = re.compile(r"<t([dh])([^>]*)>(.*?)</t\1>", re.DOTALL | re.IGNORECASE)
+_RE_COLSPAN = re.compile(r"colspan\s*=\s*['\"]?(\d+)", re.IGNORECASE)
 
 ANCHO_IMAGEN_LOGO_CM = 2.8
 
@@ -96,6 +104,79 @@ def _ruta_imagen_markdown(texto: str) -> str | None:
     return None
 
 
+def _limpiar_celda_html(texto: str) -> str:
+    """Extrae el texto plano de una celda HTML sin etiquetas ni entidades."""
+    texto = re.sub(r"<br\s*/?>", " ", texto)
+    texto = re.sub(r"<[^>]+>", "", texto)
+    return html.unescape(texto).strip()
+
+
+def _agregar_tabla_html(doc, lineas: list[str]) -> None:
+    """Convierte un bloque `<table>...</table>` en una tabla Word real.
+
+    Reutiliza la misma estrategia del hallazgo 5.6 pero para tablas HTML: cada
+    `<tr>` es una fila, cada `<td>/<th>` una celda, respeta `colspan` (filas de
+    encabezado/subtotales del formato Res. 0312) y resalta en amarillo las filas
+    marcadas con `style="background-color: yellow;"` (hallazgo NA por justificar).
+    """
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.text import WD_COLOR_INDEX
+
+    contenido = "\n".join(lineas)
+    filas = []
+    for m_fila in _RE_FILA_HTML.finditer(contenido):
+        fila = {
+            "amarillo": "yellow" in (m_fila.group(1) or "").lower(),
+            "celdas": [],
+        }
+        for m_celda in _RE_CELDA_HTML.finditer(m_fila.group(2)):
+            colspan = _RE_COLSPAN.search(m_celda.group(2))
+            fila["celdas"].append(
+                {
+                    "texto": _limpiar_celda_html(m_celda.group(3)),
+                    "span": int(colspan.group(1)) if colspan else 1,
+                    "th": m_celda.group(1) == "h",
+                }
+            )
+        if fila["celdas"]:
+            filas.append(fila)
+
+    if not filas:
+        for linea in lineas:
+            doc.add_paragraph(linea)
+        return
+
+    ncols = max(sum(c["span"] for c in fila["celdas"]) for fila in filas)
+    tabla = doc.add_table(rows=len(filas), cols=ncols)
+    tabla.alignment = WD_TABLE_ALIGNMENT.CENTER
+    try:
+        tabla.style = "Table Grid"
+    except Exception:
+        pass
+
+    for i_fila, fila in enumerate(filas):
+        k_col = 0
+        for celda in fila["celdas"]:
+            span = celda["span"]
+            celda_doc = tabla.rows[i_fila].cells[k_col]
+            for i in range(1, span):
+                if k_col + i < ncols:
+                    celda_doc = celda_doc.merge(tabla.rows[i_fila].cells[k_col + i])
+            parrafo = celda_doc.paragraphs[0]
+            if span == 1 and celda["texto"]:
+                ruta_imagen = _ruta_imagen_markdown(celda["texto"])
+                if ruta_imagen is not None:
+                    _insertar_imagen_en_celda(celda_doc, ruta_imagen)
+                    k_col += span
+                    continue
+            run = parrafo.add_run(celda["texto"])
+            if celda["th"] or i_fila == 0:
+                run.bold = True
+            if fila["amarillo"]:
+                run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+            k_col += span
+
+
 def _insertar_imagen_en_celda(celda, ruta_imagen: str):
     """Incrusta la imagen del logo en la celda de la cabecera FT-SST-002."""
     import os as _os
@@ -142,6 +223,16 @@ def _convertir_con_python_docx(md_path, docx_path):
                 doc.add_heading(linea[3:], level=2)
             elif linea.startswith("### "):
                 doc.add_heading(linea[4:], level=3)
+            elif linea.lower().startswith("<table"):
+                bloques = []
+                while n < len(lines) and "</table>" not in lines[n]:
+                    bloques.append(lines[n])
+                    n += 1
+                if n < len(lines):
+                    bloques.append(lines[n])
+                    n += 1
+                _agregar_tabla_html(doc, bloques)
+                continue
             elif linea.startswith("- ") or linea.startswith("* "):
                 doc.add_paragraph(linea[2:].strip(), style="List Bullet")
             elif linea.startswith("|") or linea.endswith("|"):

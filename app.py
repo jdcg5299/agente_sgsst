@@ -4,6 +4,7 @@ Permite la configuración de empresa, diagnóstico ponderado FT-SST-001,
 generación masiva o individual de documentos normativos bajo estándar FT-SST-002,
 y sincronización con Google Drive.
 """
+
 import os
 import json
 import streamlit as st
@@ -12,7 +13,7 @@ from pathlib import Path
 from agente_sgsst.domain.clasificacion import clasificar_empresa, get_applicable_items
 from agente_sgsst.domain.ponderacion import cargar_estandares_capitulo_iii
 from agente_sgsst.rendering.diagnostico import generar_diagnostico_base
-from agente_sgsst.generador import cargar_catalogo, generar_documento_individual, documentos_aplicables_por_capitulo
+from agente_sgsst.generador import cargar_catalogo, generar_documento_individual
 from agente_sgsst.integrations.gdrive_sync import GoogleDriveSync
 
 st.set_page_config(
@@ -60,7 +61,10 @@ def guardar_contexto(ctx):
 
 def main():
     st.title("🛡️ Agente Inteligente SG-SST (Colombia)")
-    st.markdown("Sistema de Gestión de Seguridad y Salud en el Trabajo bajo **Decreto 1072 de 2015** y **Resolución 0312 de 2019**.")
+    st.markdown(
+        "Sistema de Gestión de Seguridad y Salud en el Trabajo bajo "
+        "**Decreto 1072 de 2015** y **Resolución 0312 de 2019**."
+    )
 
     contexto = cargar_contexto()
 
@@ -99,16 +103,26 @@ def main():
         st.subheader("Información General")
         with st.form("form_empresa"):
             razon_social = st.text_input("Razón Social", value=contexto["empresa"].get("razon_social", ""))
-            nit = st.text_input("NIT / N° RUT (o Cámara de Comercio)", value=contexto["empresa"].get("nit", ""))
+            nit = st.text_input(
+                "NIT / N° RUT (o Cámara de Comercio)", value=contexto["empresa"].get("nit", "")
+            )
             direccion = st.text_input("Dirección", value=contexto["empresa"].get("direccion", ""))
-            rep_legal = st.text_input("Representante Legal", value=contexto["empresa"].get("representante_legal", ""))
-            actividad = st.text_input("Actividad Económica Principal", value=contexto["empresa"].get("actividad_economica", ""))
+            rep_legal = st.text_input(
+                "Representante Legal", value=contexto["empresa"].get("representante_legal", "")
+            )
+            actividad = st.text_input(
+                "Actividad Económica Principal", value=contexto["empresa"].get("actividad_economica", "")
+            )
 
             riesgo_actual = contexto["empresa"].get("clase_riesgo_arl", 1)
             riesgo_idx = int(riesgo_actual) - 1 if 1 <= int(riesgo_actual) <= 5 else 0
             riesgo_arl = st.selectbox("Clase de Riesgo ARL (I - V)", [1, 2, 3, 4, 5], index=riesgo_idx)
 
-            trabajadores = st.number_input("Número total de trabajadores", min_value=1, value=int(contexto["empresa"].get("total_trabajadores", 10)))
+            trabajadores = st.number_input(
+                "Número total de trabajadores",
+                min_value=1,
+                value=int(contexto["empresa"].get("total_trabajadores", 10)),
+            )
 
             st.subheader("Responsable del SG-SST")
             resp = contexto.setdefault("responsable_sst", {})
@@ -146,10 +160,19 @@ def main():
             st.warning("⚠️ Primero configure los datos de la empresa en la sección 1.")
         else:
             capitulo = clasificar_empresa(empresa["total_trabajadores"], empresa["clase_riesgo_arl"])
-            st.info(f"Empresa: **{empresa['razon_social']}** (NIT: {empresa['nit']}) | Capítulo aplicable: **{capitulo}**")
+            st.info(
+                f"Empresa: **{empresa['razon_social']}** (NIT: {empresa['nit']}) "
+                f"| Capítulo aplicable: **{capitulo}**"
+            )
 
             diag_previo = contexto.get("estado_sistema", {}).get("diagnostico", {})
             respuestas_guardadas = diag_previo.get("respuestas") or {}
+
+            if diag_previo.get("porcentaje") is not None:
+                st.metric(
+                    "Puntaje obtenido — Diagnóstico Inicial",
+                    f"{diag_previo['porcentaje'] * 100:.2f} %",
+                )
 
             # ------------------------------------------------------------------
             # Marcado C/NC/NA de los ítems aplicables del capítulo.
@@ -217,9 +240,16 @@ def main():
                         st.error(f"Error al calcular el puntaje: {e}")
 
             if st.button("Generar / Actualizar Diagnóstico FT-SST-001"):
-                contexto = generar_diagnostico_base(contexto)
-                guardar_contexto(contexto)
-                st.success("¡Diagnóstico generado con éxito!")
+                try:
+                    contexto = generar_diagnostico_base(contexto)
+                    guardar_contexto(contexto)
+                    pct_gen = contexto.get("estado_sistema", {}).get("diagnostico", {}).get("porcentaje")
+                    if pct_gen is not None:
+                        st.success(f"¡Diagnóstico generado con éxito! Puntaje: **{pct_gen * 100:.2f}%**")
+                    else:
+                        st.success("¡Diagnóstico generado con éxito!")
+                except ValueError as e:
+                    st.error(f"No se pudo generar el diagnóstico: {e}")
 
             diag_path = Path("sistema_gestion/99_INFORMES_EJECUTIVOS/Diagnostico_Inicial_Resolucion_0312.md")
             if diag_path.exists():
@@ -227,10 +257,15 @@ def main():
                 st.subheader("Vista Previa del Diagnóstico")
                 st.markdown(diag_path.read_text(encoding="utf-8"))
 
-                docx_diag = diag_path.with_suffix(".docx")
-                if docx_diag.exists():
-                    with open(docx_diag, "rb") as f:
-                        st.download_button("📥 Descargar Diagnóstico en Word (.docx)", f, file_name=docx_diag.name)
+                xlsx_diag = diag_path.with_suffix(".xlsx")
+                if xlsx_diag.exists():
+                    with open(xlsx_diag, "rb") as f:
+                        st.download_button(
+                            "📥 Descargar Diagnóstico en Excel (Res. 0312)",
+                            f,
+                            file_name=xlsx_diag.name,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
 
     # -------------------------------------------------------------------------
     # 3. GENERACIÓN DE DOCUMENTOS
@@ -250,6 +285,7 @@ def main():
                 with st.spinner("Generando documentos con IA y aplicando formato FT-SST-002..."):
                     contexto = generar_diagnostico_base(contexto)
                     from agente_sgsst.generador import generar_documentos_por_capitulo
+
                     total = generar_documentos_por_capitulo(contexto)
                     guardar_contexto(contexto)
                     st.success(f"¡Se generaron {total} documentos exitosamente!")
@@ -269,10 +305,17 @@ def main():
                     if success:
                         st.success(f"Documento {doc_id_sel} generado con éxito.")
                         info = catalogo[doc_id_sel]
-                        docx_path = f"sistema_gestion/{info['carpeta']}/{info['codigo']}_{info['nombre'].replace(' ', '_')}.docx"
+                        docx_path = (
+                            f"sistema_gestion/{info['carpeta']}/{info['codigo']}_"
+                            f"{info['nombre'].replace(' ', '_')}.docx"
+                        )
                         if os.path.exists(docx_path):
                             with open(docx_path, "rb") as f:
-                                st.download_button(f"📥 Descargar {info['codigo']}.docx", f, file_name=os.path.basename(docx_path))
+                                st.download_button(
+                                    f"📥 Descargar {info['codigo']}.docx",
+                                    f,
+                                    file_name=os.path.basename(docx_path),
+                                )
                     else:
                         st.error("Error al generar el documento.")
 
@@ -281,7 +324,9 @@ def main():
     # -------------------------------------------------------------------------
     elif menu == "☁️ 4. Google Drive":
         st.header("Sincronización con Google Drive")
-        st.markdown("Sube automáticamente la estructura PHVA (`sistema_gestion/`) a Google Drive mediante OAuth 2.0.")
+        st.markdown(
+            "Sube automáticamente la estructura PHVA (`sistema_gestion/`) a Google Drive mediante OAuth 2.0."
+        )
 
         cred_file = st.file_uploader("Subir credentials.json de Google Cloud", type=["json"])
         if cred_file is not None:
